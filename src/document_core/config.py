@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///data/document-core.db"
     database_auto_create: bool = True
     hotfolder_interval: float = 2.0
+    worker_poll_interval: float = 1.0
+    worker_lease_seconds: int = 300
+    worker_max_attempts: int = 3
+    worker_retry_base_seconds: int = 5
     connector: str = "filesystem"
     require_routing_reference: bool = False
     tesseract_lang: str = "deu+eng"

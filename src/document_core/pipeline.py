@@ -1,5 +1,6 @@
 import hashlib
 import shutil
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from .config import Settings
@@ -28,12 +29,14 @@ class DocumentPipeline:
             sha256=content_hash,
         )
         shutil.copy2(source_path, job.stored_path)
-        persisted, created = self.store.create_if_absent(job)
-        return self.process(persisted) if created else persisted
+        persisted, _ = self.store.create_if_absent(job)
+        return persisted
 
     def process(self, job: DocumentJob) -> DocumentJob:
-        job.status = JobStatus.PROCESSING
-        self.store.save(job)
+        if job.status == JobStatus.RECEIVED:
+            job.status = JobStatus.PROCESSING
+            job.attempt_count = max(job.attempt_count, 1)
+            self.store.save(job)
         try:
             extraction = self.extractor.extract(job.stored_path)
             job.text_preview = extraction.text[:500]
@@ -47,9 +50,21 @@ class DocumentPipeline:
             else:
                 job.metadata["destination_reference"] = self.connector.deliver(job)
                 job.status = JobStatus.DELIVERED
+            job.last_error = None
+            job.next_attempt_at = None
         except Exception as exc:
-            job.errors.append(str(exc))
-            job.status = JobStatus.FAILED
+            error = str(exc)
+            job.errors.append(error)
+            job.last_error = error
+            if job.attempt_count < self.settings.worker_max_attempts:
+                delay = self.settings.worker_retry_base_seconds * (2 ** (job.attempt_count - 1))
+                job.status = JobStatus.RECEIVED
+                job.next_attempt_at = datetime.now(UTC) + timedelta(seconds=delay)
+            else:
+                job.status = JobStatus.FAILED
+                job.next_attempt_at = None
+        job.worker_id = None
+        job.lease_expires_at = None
         self.store.save(job)
         return job
 

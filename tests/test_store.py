@@ -52,3 +52,44 @@ def test_job_round_trip_preserves_structured_fields():
     assert loaded is not None
     assert loaded.metadata == job.metadata
     assert loaded.stored_path == job.stored_path
+
+
+def test_claim_next_recovers_expired_processing_lease():
+    store = JobStore("sqlite://")
+    job = make_job("job-1", "d" * 64)
+    store.create_if_absent(job)
+
+    first = store.claim_next("worker-1", -1)
+    recovered = store.claim_next("worker-2", 60)
+
+    assert first.worker_id == "worker-1"
+    assert recovered.id == job.id
+    assert recovered.worker_id == "worker-2"
+    assert recovered.attempt_count == 2
+
+
+def test_claim_next_returns_each_received_job_once():
+    store = JobStore("sqlite://")
+    store.create_if_absent(make_job("job-1", "e" * 64))
+
+    claimed = store.claim_next("worker-1", 60)
+
+    assert claimed.status == JobStatus.PROCESSING
+    assert claimed.attempt_count == 1
+    assert store.claim_next("worker-2", 60) is None
+
+
+def test_only_failed_job_can_be_requeued():
+    store = JobStore("sqlite://")
+    job = make_job("job-1", "f" * 64)
+    job.status = JobStatus.FAILED
+    job.attempt_count = 3
+    job.last_error = "synthetic failure"
+    store.create_if_absent(job)
+
+    retried = store.retry_failed(job.id)
+
+    assert retried.status == JobStatus.RECEIVED
+    assert retried.attempt_count == 0
+    assert retried.last_error is None
+    assert store.retry_failed(job.id) is None

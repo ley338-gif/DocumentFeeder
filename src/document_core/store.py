@@ -1,7 +1,7 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
-from sqlalchemy import JSON, DateTime, String, Text, create_engine, select, update
+from sqlalchemy import JSON, DateTime, Integer, String, Text, and_, create_engine, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -21,6 +21,12 @@ class JobRepository(Protocol):
     def find_by_hash(self, sha256: str) -> DocumentJob | None: ...
 
     def claim_delivery(self, job_id: str) -> bool: ...
+
+    def claim_next(self, worker_id: str, lease_seconds: int) -> DocumentJob | None: ...
+
+    def renew_lease(self, job_id: str, worker_id: str, lease_seconds: int) -> bool: ...
+
+    def retry_failed(self, job_id: str) -> DocumentJob | None: ...
 
     def healthcheck(self) -> bool: ...
 
@@ -44,6 +50,11 @@ class JobRow(Base):
     review_history: Mapped[list] = mapped_column(JSON, nullable=False)
     text_preview: Mapped[str] = mapped_column(Text, nullable=False)
     errors: Mapped[list] = mapped_column(JSON, nullable=False)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    worker_id: Mapped[str | None] = mapped_column(String(200))
+    last_error: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
@@ -79,6 +90,11 @@ class JobStore:
             "review_history": [event.model_dump(mode="json") for event in job.review_history],
             "text_preview": job.text_preview,
             "errors": job.errors,
+            "attempt_count": job.attempt_count,
+            "next_attempt_at": job.next_attempt_at,
+            "lease_expires_at": job.lease_expires_at,
+            "worker_id": job.worker_id,
+            "last_error": job.last_error,
             "created_at": job.created_at,
             "updated_at": job.updated_at,
         }
@@ -99,6 +115,11 @@ class JobStore:
                 "review_history": row.review_history,
                 "text_preview": row.text_preview,
                 "errors": row.errors,
+                "attempt_count": row.attempt_count,
+                "next_attempt_at": row.next_attempt_at,
+                "lease_expires_at": row.lease_expires_at,
+                "worker_id": row.worker_id,
+                "last_error": row.last_error,
                 "created_at": row.created_at,
                 "updated_at": row.updated_at,
             }
@@ -151,6 +172,74 @@ class JobStore:
                 .values(status=JobStatus.DELIVERING.value, updated_at=datetime.now(UTC))
             )
             return result.rowcount == 1
+
+    def claim_next(self, worker_id: str, lease_seconds: int) -> DocumentJob | None:
+        now = datetime.now(UTC)
+        due = or_(
+            and_(
+                JobRow.status == JobStatus.RECEIVED.value,
+                or_(JobRow.next_attempt_at.is_(None), JobRow.next_attempt_at <= now),
+            ),
+            and_(
+                JobRow.status == JobStatus.PROCESSING.value,
+                JobRow.lease_expires_at.is_not(None),
+                JobRow.lease_expires_at <= now,
+            ),
+        )
+        with self.sessions.begin() as session:
+            row = session.scalar(
+                select(JobRow)
+                .where(due)
+                .order_by(JobRow.created_at)
+                .with_for_update(skip_locked=True)
+                .limit(1)
+            )
+            if row is None:
+                return None
+            row.status = JobStatus.PROCESSING.value
+            row.worker_id = worker_id
+            row.lease_expires_at = now + timedelta(seconds=lease_seconds)
+            row.next_attempt_at = None
+            row.attempt_count += 1
+            row.updated_at = now
+            session.flush()
+            return self._model(row)
+
+    def renew_lease(self, job_id: str, worker_id: str, lease_seconds: int) -> bool:
+        now = datetime.now(UTC)
+        with self.sessions.begin() as session:
+            result = session.execute(
+                update(JobRow)
+                .where(
+                    JobRow.id == job_id,
+                    JobRow.status == JobStatus.PROCESSING.value,
+                    JobRow.worker_id == worker_id,
+                )
+                .values(
+                    lease_expires_at=now + timedelta(seconds=lease_seconds), updated_at=now
+                )
+            )
+            return result.rowcount == 1
+
+    def retry_failed(self, job_id: str) -> DocumentJob | None:
+        now = datetime.now(UTC)
+        with self.sessions.begin() as session:
+            result = session.execute(
+                update(JobRow)
+                .where(JobRow.id == job_id, JobRow.status == JobStatus.FAILED.value)
+                .values(
+                    status=JobStatus.RECEIVED.value,
+                    attempt_count=0,
+                    next_attempt_at=None,
+                    lease_expires_at=None,
+                    worker_id=None,
+                    last_error=None,
+                    updated_at=now,
+                )
+            )
+            if result.rowcount != 1:
+                return None
+        return self.get(job_id)
 
     def healthcheck(self) -> bool:
         try:

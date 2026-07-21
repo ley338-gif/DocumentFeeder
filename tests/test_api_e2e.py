@@ -22,6 +22,12 @@ def configure_api(tmp_path: Path, monkeypatch) -> Settings:
     return settings
 
 
+def process_next_job():
+    job = api_module.store.claim_next("test-worker", 60)
+    assert job is not None
+    return api_module.pipeline.process(job)
+
+
 def test_pdf_upload_reaches_connector_through_http_api(tmp_path: Path, monkeypatch):
     settings = configure_api(tmp_path, monkeypatch)
     pdf = text_pdf_bytes(
@@ -36,8 +42,9 @@ def test_pdf_upload_reaches_connector_through_http_api(tmp_path: Path, monkeypat
             "/v1/documents", files={"file": ("bericht.pdf", pdf, "application/pdf")}
         )
 
-    assert response.status_code == 201
-    job = response.json()
+    assert response.status_code == 202
+    assert response.json()["status"] == JobStatus.RECEIVED
+    job = process_next_job().model_dump(mode="json")
     assert job["status"] == JobStatus.DELIVERED
     assert job["document_type"] == "report"
     assert job["metadata"]["subject_name"] == "Beispielobjekt"
@@ -56,14 +63,15 @@ def test_unknown_pdf_is_quarantined_through_http_api(tmp_path: Path, monkeypatch
             "/v1/documents", files={"file": ("unknown.pdf", pdf, "application/pdf")}
         )
 
-    assert response.status_code == 201
-    job = response.json()
+    assert response.status_code == 202
+    job = process_next_job().model_dump(mode="json")
     assert job["status"] == JobStatus.QUARANTINED
     assert (settings.quarantine_dir / f"{job['id']}-unknown.pdf").exists()
 
 
 def test_broken_pdf_fails_with_diagnostic_error(tmp_path: Path, monkeypatch):
     configure_api(tmp_path, monkeypatch)
+    api_module.pipeline.settings.worker_retry_base_seconds = 0
 
     with TestClient(api_module.app) as client:
         response = client.post(
@@ -71,8 +79,10 @@ def test_broken_pdf_fails_with_diagnostic_error(tmp_path: Path, monkeypatch):
             files={"file": ("broken.pdf", b"not a pdf", "application/pdf")},
         )
 
-    assert response.status_code == 201
-    job = response.json()
+    assert response.status_code == 202
+    job = None
+    for _ in range(api_module.pipeline.settings.worker_max_attempts):
+        job = process_next_job().model_dump(mode="json")
     assert job["status"] == JobStatus.FAILED
     assert job["errors"]
     assert "PDF konnte nicht gelesen werden" in job["errors"][0]
@@ -86,6 +96,8 @@ def test_quarantined_document_can_be_reviewed_and_released(tmp_path: Path, monke
         uploaded = client.post(
             "/v1/documents", files={"file": ("review.pdf", pdf, "application/pdf")}
         ).json()
+        assert uploaded["status"] == JobStatus.RECEIVED
+        uploaded = process_next_job().model_dump(mode="json")
         assert uploaded["status"] == JobStatus.QUARANTINED
 
         reviewed_response = client.patch(
@@ -129,6 +141,8 @@ def test_non_quarantined_document_cannot_be_reviewed(tmp_path: Path, monkeypatch
         job = client.post(
             "/v1/documents", files={"file": ("delivered.pdf", pdf, "application/pdf")}
         ).json()
+        assert job["status"] == JobStatus.RECEIVED
+        job = process_next_job().model_dump(mode="json")
         response = client.patch(
             f"/v1/jobs/{job['id']}/review",
             json={"reviewer": "test-reviewer", "reason": "Nicht erlaubt"},
@@ -136,3 +150,50 @@ def test_non_quarantined_document_cannot_be_reviewed(tmp_path: Path, monkeypatch
 
     assert job["status"] == JobStatus.DELIVERED
     assert response.status_code == 409
+
+
+def test_frontend_job_api_supports_stats_pagination_and_content(tmp_path: Path, monkeypatch):
+    configure_api(tmp_path, monkeypatch)
+    source = b"Bericht\nBetreff: Frontend API\nReferenz: UI-1"
+
+    with TestClient(api_module.app) as client:
+        home = client.get("/")
+        uploaded = client.post(
+            "/v1/documents", files={"file": ("frontend.txt", source, "text/plain")}
+        ).json()
+        listing = client.get("/v1/jobs", params={"status": "received", "limit": 1})
+        stats = client.get("/v1/jobs/stats")
+        content = client.get(f"/v1/jobs/{uploaded['id']}/content")
+        download = client.get(
+            f"/v1/jobs/{uploaded['id']}/content", params={"download": "true"}
+        )
+
+    assert home.status_code == 200
+    assert "Document Core" in home.text
+    assert listing.status_code == 200
+    assert listing.json()["total"] == 1
+    assert listing.json()["items"][0]["id"] == uploaded["id"]
+    assert stats.json()["by_status"]["received"] == 1
+    assert content.content == source
+    assert content.headers["content-disposition"].startswith("inline")
+    assert download.headers["content-disposition"].startswith("attachment")
+
+
+def test_failed_job_can_be_requeued_from_api(tmp_path: Path, monkeypatch):
+    configure_api(tmp_path, monkeypatch)
+    api_module.pipeline.settings.worker_max_attempts = 1
+
+    with TestClient(api_module.app) as client:
+        uploaded = client.post(
+            "/v1/documents",
+            files={"file": ("broken.pdf", b"not a pdf", "application/pdf")},
+        ).json()
+        failed = process_next_job()
+        response = client.post(f"/v1/jobs/{uploaded['id']}/retry")
+
+    assert failed.status == JobStatus.FAILED
+    assert response.status_code == 202
+    retried = response.json()
+    assert retried["status"] == JobStatus.RECEIVED
+    assert retried["attempt_count"] == 0
+    assert retried["last_error"] is None

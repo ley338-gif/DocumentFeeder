@@ -18,6 +18,24 @@ PostgreSQL; ohne Konfiguration nutzt die lokale Entwicklung `data/document-core.
 über SQLite. `DOCUMENT_CORE_DATABASE_AUTO_CREATE` ist lokal standardmäßig aktiv. Im
 Compose-Betrieb ist es deaktiviert, weil Alembic das Schema vor dem API-Start migriert.
 
+Queue und Worker werden über folgende Variablen gesteuert:
+
+| Variable | Standard | Zweck |
+|---|---:|---|
+| `DOCUMENT_CORE_WORKER_POLL_INTERVAL` | `1` | Wartezeit ohne fälligen Job |
+| `DOCUMENT_CORE_WORKER_LEASE_SECONDS` | `300` | Reservierungsdauer eines Jobs |
+| `DOCUMENT_CORE_WORKER_MAX_ATTEMPTS` | `3` | maximale technische Versuche |
+| `DOCUMENT_CORE_WORKER_RETRY_BASE_SECONDS` | `5` | Basis des exponentiellen Backoffs |
+
+```bash
+docker compose logs -f worker
+docker compose restart worker
+```
+
+Ein Worker-Neustart verliert keine Jobs. Ein `processing`-Job kann nach Ablauf seiner Lease
+erneut beansprucht werden. Connectoren müssen trotzdem den dokumentierten Idempotenzschlüssel
+verwenden, da ein externer Aufruf und ein Datenbankcommit keine gemeinsame Transaktion bilden.
+
 ## Datenbank und Migrationen
 
 ```bash
@@ -43,8 +61,13 @@ und darf nur für einen bewusst bestätigten Entwicklungsreset verwendet werden.
 ## Fehleranalyse
 
 Jobstatus und `errors` über `/v1/jobs/{id}` prüfen. `quarantined` bedeutet fachlich unklar,
-`delivering` eine aktuell beanspruchte Zustellung und `failed` technisch fehlgeschlagen.
-Die MVP-Version führt noch keinen automatischen Retry aus.
+`processing` einen vom Worker beanspruchten Job, `delivering` eine manuelle Zustellung und
+`failed` einen nach allen Versuchen technisch fehlgeschlagenen Job. `attempt_count`,
+`next_attempt_at`, `lease_expires_at`, `worker_id` und `last_error` erklären den Queue-Zustand.
+
+Die Operator-Konsole ist unter `/`, die OpenAPI-Dokumentation unter `/docs` erreichbar.
+Der Retry-Endpunkt und alle schreibenden UI-Aktionen sind im MVP nicht authentisiert und
+dürfen nur in einer kontrollierten Entwicklungsumgebung zugänglich sein.
 
 Quarantänisierte Jobs werden über `PATCH /v1/jobs/{id}/review` korrigiert. Ein Review benötigt
 Bearbeiter und Begründung; Dokumenttyp, Routing-Referenz und Metadaten sind optional. Erst

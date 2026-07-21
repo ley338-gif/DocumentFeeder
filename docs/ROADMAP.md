@@ -10,7 +10,10 @@ Ziel: synthetisches Textdokument Ende-zu-Ende vom Eingang zum Dateisystem-Connec
 
 - PDF/Text-Layer und mehrseitige OCR
 - PostgreSQL und atomare Delivery-Claims (umgesetzt)
-- Worker/Queue, Lease-Recovery und Retry
+- Worker/Queue, Lease-Recovery und Retry (umgesetzt)
+- Worker-Metriken, kontrolliertes Shutdown und administrativer Retry
+- Operator-Konsole für Übersicht, Vorschau, Review, Freigabe und Retry (MVP umgesetzt)
+- Authentisierung, Rollenmodell und produktionsfähiger Audit-Trail
 - Authentisierung, Audit-Events, Upload-Limits und Malware-Prüfung
 - Review-API/-UI für Quarantäne
 - Observability und Betriebsmetriken

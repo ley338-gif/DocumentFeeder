@@ -31,11 +31,21 @@ flowchart LR
 
 ## Statusmodell
 
-`received → processing → delivered | quarantined | failed`
+`received → processing → delivered | quarantined | received (Retry) | failed`
 
 Bei manueller Freigabe gilt zusätzlich
 `quarantined → delivering → delivered | failed`. Der atomare Wechsel nach `delivering`
 ist der Delivery-Claim und verhindert parallele Connector-Aufrufe.
+
+Die API führt keine OCR oder Klassifikation aus. Sie persistiert einen Job mit `received`;
+ein separater Worker beansprucht den ältesten fälligen Job mittels `SELECT ... FOR UPDATE
+SKIP LOCKED`. Der Claim setzt `worker_id` und `lease_expires_at`. Ein Heartbeat verlängert
+die Lease während der Verarbeitung. Nach einem Worker-Abbruch wird der Job nach Ablauf
+der Lease von einem anderen Worker übernommen.
+
+Technische Fehler planen den Job mit exponentiellem Backoff erneut ein. Fachlich unklare
+Dokumente wechseln ohne Retry nach `quarantined`. Nach Erreichen von `worker_max_attempts`
+endet ein technischer Fehler in `failed`.
 
 Jeder Job besitzt ID, Hash, Quelle, Originalname, Status, Metadaten, Fehler und Zeitstempel. Review-Entscheidungen werden mit Bearbeiter, Begründung und Änderungen protokolliert. Für Produktion sind Rollen/Rechte, Verschlüsselung, Aufbewahrung und Löschkonzepte vor Verarbeitung echter Fachdaten verpflichtend.
 
@@ -45,8 +55,8 @@ getrennt; Connector-spezifische Policies bestimmen, ob eine Routing-Referenz Pfl
 
 ## Nächste technische Grenzen
 
-- Die synchrone Verarbeitung wird als nächster Schritt durch einen Worker und eine
-  persistente Queue ersetzt.
+- Als nächster Robustheitsschritt sollten Worker-Metriken, kontrolliertes Shutdown und
+  ein administrativer Retry-Endpunkt ergänzt werden.
 - Der synchrone Prozessor wird ein Worker; die API antwortet dann mit `202 Accepted`.
 - PDF-Text-Layer und mehrseitiger OCR-Fallback sind implementiert; als nächster Schritt
   sollte die Extraktion hinter ein explizites Adapter-Interface gezogen werden.

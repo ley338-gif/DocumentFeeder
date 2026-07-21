@@ -50,5 +50,22 @@ class DocumentJob(BaseModel):
     review_history: list[ReviewEvent] = Field(default_factory=list)
     text_preview: str = ""
     errors: list[str] = Field(default_factory=list)
+    attempt_count: int = 0
+    next_attempt_at: datetime | None = None
+    lease_expires_at: datetime | None = None
+    worker_id: str | None = None
+    last_error: str | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class JobListResponse(BaseModel):
+    items: list[DocumentJob]
+    total: int
+    limit: int
+    offset: int
+
+
+class JobStatsResponse(BaseModel):
+    total: int
+    by_status: dict[JobStatus, int]

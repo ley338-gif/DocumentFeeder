@@ -14,8 +14,10 @@ def test_text_document_reaches_filesystem_connector(tmp_path: Path):
     source.write_text("Bericht\nBetreff: Beispiel\nReferenz: X-1", encoding="utf-8")
     pipeline = DocumentPipeline(settings, JobStore("sqlite://"), FilesystemConnector(settings.output_dir))
 
-    job = pipeline.ingest(source, "test")
+    queued = pipeline.ingest(source, "test")
+    job = pipeline.process(pipeline.store.claim_next("test-worker", 60))
 
+    assert queued.status == JobStatus.RECEIVED
     assert job.status == JobStatus.DELIVERED
     assert Path(job.metadata["destination_reference"]).exists()
     assert (settings.output_dir / "report" / job.id / "metadata.json").exists()

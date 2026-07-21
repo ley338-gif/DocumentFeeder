@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from .models import DocumentJob, InputChannel, JobStatus, TargetSystem
+from .models import DeliveryRule, DocumentJob, InputChannel, JobStatus, TargetSystem
 
 
 class JobRepository(Protocol):
@@ -49,6 +49,7 @@ class JobRow(Base):
     document_type: Mapped[str] = mapped_column(String(100), nullable=False)
     routing_reference: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     target_system_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    delivery_path_template: Mapped[str | None] = mapped_column(Text)
     metadata_json: Mapped[dict] = mapped_column("metadata", JSON, nullable=False)
     review_history: Mapped[list] = mapped_column(JSON, nullable=False)
     text_preview: Mapped[str] = mapped_column(Text, nullable=False)
@@ -84,12 +85,28 @@ class TargetSystemRow(Base):
     name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
     kind: Mapped[str] = mapped_column(String(32), nullable=False)
     endpoint_url: Mapped[str | None] = mapped_column(Text)
+    directory: Mapped[str] = mapped_column(String(300), nullable=False)
+    path_template: Mapped[str] = mapped_column(Text, nullable=False)
     bearer_token: Mapped[str | None] = mapped_column(Text)
     timeout_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
     enabled: Mapped[bool] = mapped_column(nullable=False)
     is_default: Mapped[bool] = mapped_column(nullable=False, index=True)
     last_delivery_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class DeliveryRuleRow(Base):
+    __tablename__ = "delivery_rules"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    document_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    target_system_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    path_template: Mapped[str | None] = mapped_column(Text)
+    enabled: Mapped[bool] = mapped_column(nullable=False)
+    priority: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
@@ -122,6 +139,7 @@ class JobStore:
                 job.routing_reference.model_dump(mode="json") if job.routing_reference else None
             ),
             "target_system_id": job.target_system_id,
+            "delivery_path_template": job.delivery_path_template,
             "metadata_json": job.metadata,
             "review_history": [event.model_dump(mode="json") for event in job.review_history],
             "text_preview": job.text_preview,
@@ -148,6 +166,7 @@ class JobStore:
                 "document_type": row.document_type,
                 "routing_reference": row.routing_reference,
                 "target_system_id": row.target_system_id,
+                "delivery_path_template": row.delivery_path_template,
                 "metadata": row.metadata_json,
                 "review_history": row.review_history,
                 "text_preview": row.text_preview,
@@ -402,3 +421,54 @@ class JobStore:
         return self.save_target_system(
             TargetSystem(name="Dateisystem", kind="filesystem", enabled=True, is_default=True)
         )
+
+    @staticmethod
+    def _rule_model(row: DeliveryRuleRow) -> DeliveryRule:
+        return DeliveryRule.model_validate(
+            {column.name: getattr(row, column.name) for column in row.__table__.columns}
+        )
+
+    def list_delivery_rules(self) -> list[DeliveryRule]:
+        with self.sessions() as session:
+            rows = session.scalars(
+                select(DeliveryRuleRow).order_by(DeliveryRuleRow.priority, DeliveryRuleRow.name)
+            ).all()
+            return [self._rule_model(row) for row in rows]
+
+    def get_delivery_rule(self, rule_id: str) -> DeliveryRule | None:
+        with self.sessions() as session:
+            row = session.get(DeliveryRuleRow, rule_id)
+            return self._rule_model(row) if row else None
+
+    def find_delivery_rule(self, document_type: str) -> DeliveryRule | None:
+        with self.sessions() as session:
+            row = session.scalar(
+                select(DeliveryRuleRow)
+                .where(
+                    DeliveryRuleRow.document_type == document_type,
+                    DeliveryRuleRow.enabled.is_(True),
+                )
+                .order_by(DeliveryRuleRow.priority)
+                .limit(1)
+            )
+            return self._rule_model(row) if row else None
+
+    def save_delivery_rule(self, rule: DeliveryRule) -> DeliveryRule:
+        rule.updated_at = datetime.now(UTC)
+        values = rule.model_dump()
+        with self.sessions.begin() as session:
+            row = session.get(DeliveryRuleRow, rule.id)
+            if row is None:
+                session.add(DeliveryRuleRow(**values))
+            else:
+                for key, value in values.items():
+                    setattr(row, key, value)
+        return rule
+
+    def delete_delivery_rule(self, rule_id: str) -> bool:
+        with self.sessions.begin() as session:
+            row = session.get(DeliveryRuleRow, rule_id)
+            if row is None:
+                return False
+            session.delete(row)
+            return True

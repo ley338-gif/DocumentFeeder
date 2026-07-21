@@ -3,7 +3,7 @@ import json
 
 from document_core.config import Settings
 from document_core.connectors import FilesystemConnector
-from document_core.models import JobStatus, TargetSystem
+from document_core.models import DeliveryRule, JobStatus, TargetSystem
 from document_core.pipeline import DocumentPipeline
 from document_core.store import JobStore
 
@@ -75,3 +75,37 @@ def test_document_reaches_configured_http_target(tmp_path: Path, monkeypatch):
     assert captured["payload"]["document_type"] == "report"
     assert captured["authorization"] == "Bearer secret"
     assert store.get_target_system(target.id).last_delivery_at is not None
+
+
+def test_delivery_rule_routes_invoice_to_configured_folder(tmp_path: Path):
+    settings = Settings(data_dir=tmp_path)
+    settings.create_directories()
+    source = tmp_path / "rechnung.txt"
+    source.write_text("Rechnung\nDatum: 21.07.2026\nReferenz: R-4711", encoding="utf-8")
+    store = JobStore("sqlite://")
+    default = TargetSystem(name="Standard", kind="filesystem", is_default=True)
+    invoices = TargetSystem(
+        name="Rechnungsarchiv",
+        kind="filesystem",
+        directory="archive",
+        path_template="invoices/{year}/{month}/{job_id}",
+    )
+    store.save_target_system(default)
+    store.save_target_system(invoices)
+    store.save_delivery_rule(
+        DeliveryRule(
+            name="Rechnungen ablegen",
+            document_type="invoice",
+            target_system_id=invoices.id,
+            path_template="rechnungen/{year}/{month}/{job_id}",
+        )
+    )
+    pipeline = DocumentPipeline(settings, store, FilesystemConnector(settings.output_dir))
+
+    queued = pipeline.ingest(source, "test")
+    job = pipeline.process(store.claim_next("worker", 60))
+
+    assert queued.target_system_id == default.id
+    assert job.target_system_id == invoices.id
+    assert job.metadata["delivery_rule"] == "Rechnungen ablegen"
+    assert (tmp_path / "archive" / "rechnungen" / "2026" / "07" / job.id / "rechnung.txt").exists()

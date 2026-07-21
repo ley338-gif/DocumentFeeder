@@ -6,6 +6,14 @@ die dokumentierte `/v1`-API.
 
 ## Funktionsumfang
 
+Die Hauptnavigation folgt dem Arbeitsablauf:
+
+- **Übersicht** zeigt alle aktuellen Dokumente und Statuszahlen.
+- **Prüfen** öffnet direkt die Queue der fachlich unklaren Dokumente.
+- **Dokumente** dient als vollständiges Archiv.
+- **Automatisierung** verwaltet dokumenttypabhängige Ablageregeln.
+- **Einstellungen** bündelt Eingangskanäle und Zielsysteme.
+
 - Statusübersicht und Filter
 - Suche nach Dateiname, Job-ID, Dokumenttyp und Routing-Referenz
 - paginierte Jobliste
@@ -39,6 +47,16 @@ Review kann für quarantänisierte Dokumente ein anderes aktives Ziel gewählt w
 Bearer-Tokens sind nach dem Speichern nicht mehr sichtbar. Die Oberfläche zeigt lediglich,
 ob ein Token hinterlegt ist. Das Standardziel kann weder pausiert noch gelöscht werden;
 zuerst muss ein anderes Ziel zum Standard gemacht werden.
+
+Dateisystemziele besitzen einen Ablageordner innerhalb von `data/` und eine Pfadvorlage.
+Die Dokumentdetailansicht zeigt Zielsystem und endgültige Zustellreferenz direkt an.
+
+## Automatisierung
+
+Eine Ablageregel verbindet einen erkannten Dokumenttyp mit einem Zielsystem und optional
+einer eigenen Pfadvorlage. Regeln werden nach Priorität ausgewertet; die erste aktive Regel
+für den Dokumenttyp gewinnt. Ohne passende Regel bleibt das beim Eingang gespeicherte
+Standardziel erhalten.
 
 ## API-Verträge
 

@@ -5,6 +5,7 @@ import tempfile
 from contextlib import asynccontextmanager, suppress
 from datetime import UTC, datetime
 from pathlib import Path
+from string import Formatter
 from urllib.parse import urlparse
 
 from fastapi import FastAPI, File, HTTPException, Query, Response, UploadFile
@@ -16,6 +17,9 @@ from .config import Settings
 from .connectors import FilesystemConnector
 from .models import (
     DocumentJob,
+    DeliveryRule,
+    DeliveryRuleCreate,
+    DeliveryRuleUpdate,
     InputChannel,
     InputChannelCreate,
     InputChannelUpdate,
@@ -186,8 +190,24 @@ def validate_target(target: TargetSystem) -> None:
             raise HTTPException(status_code=422, detail="HTTP-Ziel benötigt eine gültige URL")
     elif target.endpoint_url:
         raise HTTPException(status_code=422, detail="Dateisystem-Ziele haben keine Endpoint-URL")
+    if target.kind == "filesystem":
+        target.directory, _ = validate_channel_settings(target.directory, ["*"])
+        validate_path_template(target.path_template)
     if target.is_default and not target.enabled:
         raise HTTPException(status_code=422, detail="Das Standardziel muss aktiv sein")
+
+
+def validate_path_template(template: str) -> str:
+    allowed = {"document_type", "year", "month", "job_id", "reference"}
+    try:
+        fields = {field for _, field, _, _ in Formatter().parse(template) if field}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="Ungültige Pfadvorlage") from exc
+    if not fields.issubset(allowed) or "\\" in template or Path(template).is_absolute():
+        raise HTTPException(status_code=422, detail="Pfadvorlage enthält ungültige Platzhalter")
+    if ".." in Path(template).parts:
+        raise HTTPException(status_code=422, detail="Pfadvorlage darf data/ nicht verlassen")
+    return template
 
 
 @app.get("/v1/target-systems", response_model=list[TargetSystemView])
@@ -232,6 +252,48 @@ def delete_target_system(target_id: str) -> Response:
     if target.is_default:
         raise HTTPException(status_code=409, detail="Standardziel kann nicht gelöscht werden")
     store.delete_target_system(target_id)
+    return Response(status_code=204)
+
+
+@app.get("/v1/delivery-rules", response_model=list[DeliveryRule])
+def list_delivery_rules() -> list[DeliveryRule]:
+    return store.list_delivery_rules()
+
+
+@app.post("/v1/delivery-rules", response_model=DeliveryRule, status_code=201)
+def create_delivery_rule(request: DeliveryRuleCreate) -> DeliveryRule:
+    target = store.get_target_system(request.target_system_id)
+    if target is None:
+        raise HTTPException(status_code=422, detail="Zielsystem nicht gefunden")
+    values = request.model_dump()
+    if request.path_template:
+        values["path_template"] = validate_path_template(request.path_template)
+    rule = DeliveryRule(**values)
+    try:
+        return store.save_delivery_rule(rule)
+    except IntegrityError as exc:
+        raise HTTPException(status_code=409, detail="Regelname ist bereits vergeben") from exc
+
+
+@app.patch("/v1/delivery-rules/{rule_id}", response_model=DeliveryRule)
+def update_delivery_rule(rule_id: str, request: DeliveryRuleUpdate) -> DeliveryRule:
+    rule = store.get_delivery_rule(rule_id)
+    if rule is None:
+        raise HTTPException(status_code=404, detail="Automatisierungsregel nicht gefunden")
+    values = request.model_dump(exclude_unset=True)
+    if "target_system_id" in values and store.get_target_system(values["target_system_id"]) is None:
+        raise HTTPException(status_code=422, detail="Zielsystem nicht gefunden")
+    if values.get("path_template"):
+        values["path_template"] = validate_path_template(values["path_template"])
+    for key, value in values.items():
+        setattr(rule, key, value)
+    return store.save_delivery_rule(rule)
+
+
+@app.delete("/v1/delivery-rules/{rule_id}", status_code=204)
+def delete_delivery_rule(rule_id: str) -> Response:
+    if not store.delete_delivery_rule(rule_id):
+        raise HTTPException(status_code=404, detail="Automatisierungsregel nicht gefunden")
     return Response(status_code=204)
 
 

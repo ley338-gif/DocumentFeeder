@@ -22,12 +22,34 @@ class TargetConnector(ABC):
 
 
 class FilesystemConnector(TargetConnector):
-    def __init__(self, output_dir: Path):
+    def __init__(
+        self,
+        output_dir: Path,
+        path_template: str = "{document_type}/{job_id}",
+    ):
         self.output_dir = output_dir
+        self.path_template = path_template
         output_dir.mkdir(parents=True, exist_ok=True)
 
     def deliver(self, job: DocumentJob) -> str:
-        destination = self.output_dir / job.document_type / job.id
+        def safe(value: str) -> str:
+            return value.replace("/", "_").replace("\\", "_").replace("..", "_")
+
+        values = {
+            "document_type": safe(job.document_type),
+            "year": f"{job.created_at.year:04d}",
+            "month": f"{job.created_at.month:02d}",
+            "job_id": job.id,
+            "reference": safe(
+                job.routing_reference.value if job.routing_reference else "ohne-referenz"
+            ),
+        }
+        rendered = (job.delivery_path_template or self.path_template).format_map(values)
+        relative = Path(rendered)
+        destination = (self.output_dir / relative).resolve()
+        root = self.output_dir.resolve()
+        if relative.is_absolute() or root not in destination.parents:
+            raise ValueError("Zielpfad liegt außerhalb des konfigurierten Ablageordners")
         destination.mkdir(parents=True, exist_ok=True)
         document = destination / job.original_filename
         shutil.copy2(job.stored_path, document)

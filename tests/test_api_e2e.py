@@ -288,3 +288,40 @@ def test_http_target_requires_valid_endpoint(tmp_path: Path, monkeypatch):
         )
 
     assert response.status_code == 422
+
+
+def test_delivery_rules_can_be_managed_through_api(tmp_path: Path, monkeypatch):
+    configure_api(tmp_path, monkeypatch)
+
+    with TestClient(api_module.app) as client:
+        target = client.get("/v1/target-systems").json()[0]
+        created = client.post(
+            "/v1/delivery-rules",
+            json={
+                "name": "Rechnungsablage",
+                "document_type": "invoice",
+                "target_system_id": target["id"],
+                "path_template": "rechnungen/{year}/{month}/{job_id}",
+                "enabled": True,
+                "priority": 10,
+            },
+        )
+        rule = created.json()
+        listing = client.get("/v1/delivery-rules")
+        paused = client.patch(
+            f"/v1/delivery-rules/{rule['id']}", json={"enabled": False}
+        )
+        unsafe = client.post(
+            "/v1/delivery-rules",
+            json={
+                "name": "Unsafe",
+                "document_type": "report",
+                "target_system_id": target["id"],
+                "path_template": "../outside/{job_id}",
+            },
+        )
+
+    assert created.status_code == 201
+    assert listing.json()[0]["name"] == "Rechnungsablage"
+    assert paused.json()["enabled"] is False
+    assert unsafe.status_code == 422

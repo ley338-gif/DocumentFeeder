@@ -13,7 +13,9 @@ class TargetConnector(ABC):
 ## Implementierte Connectoren
 
 Der Dateisystem-Connector schreibt Dokument und `metadata.json` strukturiert unter
-`data/output/{document_type}/{job.id}`. Der generische HTTP-Connector sendet ein JSON-Paket
+dem konfigurierten Ablageordner. Die Standardvorlage lautet
+`{document_type}/{job_id}`. Verfügbar sind außerdem `{year}`, `{month}` und `{reference}`.
+Aufgelöste Pfade müssen innerhalb des Zielordners bleiben. Der generische HTTP-Connector sendet ein JSON-Paket
 per `POST`. `Idempotency-Key` enthält immer die Job-ID; ein optionaler Bearer-Token wird als
 `Authorization`-Header übertragen und von der Verwaltungs-API niemals zurückgegeben.
 

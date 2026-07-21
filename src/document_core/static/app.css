@@ -125,6 +125,8 @@ h1 { margin: 0; font-size: clamp(32px, 4vw, 54px); line-height: 1.04; letter-spa
 .channel-details { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 13px; color: var(--muted); font-size: 12px; }
 .channel-details strong { color: var(--ink); }
 .channel-error { margin-top: 10px; color: var(--red); font-size: 12px; }
+.rule-sentence { margin: 13px 0 5px; color: var(--muted); }
+.rule-sentence strong { color: var(--ink); }
 .channel-actions { display: flex; gap: 7px; align-items: start; }
 .channel-form-card { position: sticky; top: 92px; padding: 22px; border: 1px solid var(--line); border-radius: 17px; background: white; box-shadow: var(--shadow); }
 .channel-form-card .eyebrow { margin-bottom: 4px; }
@@ -148,7 +150,8 @@ h1 { margin: 0; font-size: clamp(32px, 4vw, 54px); line-height: 1.04; letter-spa
   .topbar { padding: 0 14px; }
   .system-state span:last-child { display: none; }
   .brand small { display: none; }
-  .main-nav { order: 3; position: absolute; top: 72px; left: 0; right: 0; border-radius: 0; justify-content: center; border-bottom: 1px solid var(--line); }
+  .main-nav { order: 3; position: absolute; top: 72px; left: 0; right: 0; border-radius: 0; justify-content: start; overflow-x: auto; border-bottom: 1px solid var(--line); }
+  .nav-button { white-space: nowrap; }
   main { padding-top: 68px; }
   .hero { align-items: stretch; flex-direction: column; }
   .stats { grid-template-columns: repeat(2, 1fr); }

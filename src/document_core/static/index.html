@@ -14,9 +14,11 @@
       <span><strong>Document Core</strong><small>Operator Console</small></span>
     </a>
     <nav class="main-nav" aria-label="Hauptnavigation">
-      <button class="nav-button active" data-view="documents" type="button">Dokumente</button>
-      <button class="nav-button" data-view="channels" type="button">Eingangskanäle</button>
-      <button class="nav-button" data-view="targets" type="button">Zielsysteme</button>
+      <button class="nav-button active" data-view="documents" data-status="" type="button">Übersicht</button>
+      <button class="nav-button" data-view="documents" data-status="quarantined" type="button">Prüfen</button>
+      <button class="nav-button" data-view="documents" data-status="all" type="button">Dokumente</button>
+      <button class="nav-button" data-view="automation" type="button">Automatisierung</button>
+      <button class="nav-button" data-view="channels" type="button">Einstellungen</button>
     </nav>
     <div class="system-state"><span id="health-dot" class="health-dot"></span><span id="health-text">System wird geprüft</span></div>
   </header>
@@ -25,9 +27,9 @@
     <div id="documents-view">
     <section class="hero">
       <div>
-        <p class="eyebrow">Dokumentenfluss</p>
-        <h1>Verarbeiten. Prüfen. Zustellen.</h1>
-        <p class="hero-copy">Alle Eingänge, Ausnahmen und Zustellungen in einer ruhigen Arbeitsansicht.</p>
+        <p class="eyebrow">Arbeitsbereich</p>
+        <h1>Dokumente im Fluss.</h1>
+        <p class="hero-copy">Eingänge überblicken, offene Prüfungen erledigen und Zustellungen nachvollziehen.</p>
       </div>
       <label class="upload-button" for="file-upload">
         <span>Dokument hochladen</span>
@@ -77,9 +79,10 @@
       <section class="hero channel-hero">
         <div>
           <p class="eyebrow">Konfiguration</p>
-          <h1>Eingangskanäle</h1>
-          <p class="hero-copy">Hotfolder benennen, filtern und im laufenden Betrieb steuern.</p>
+          <h1>Einstellungen</h1>
+          <p class="hero-copy">Eingänge und Zielsysteme an einem Ort verwalten.</p>
         </div>
+        <button id="show-targets" class="button" type="button">Zu den Zielsystemen</button>
       </section>
       <section class="channel-layout">
         <div>
@@ -107,6 +110,7 @@
           <h1>Zielsysteme</h1>
           <p class="hero-copy">Dateisystem- und HTTP-Ziele konfigurieren und als Standard festlegen.</p>
         </div>
+        <button id="show-channels" class="button" type="button">Zu den Eingangskanälen</button>
       </section>
       <section class="channel-layout">
         <div>
@@ -120,11 +124,37 @@
             <label>Name<input name="name" placeholder="z. B. Archiv Sandbox" required maxlength="100"></label>
             <label>Connector-Typ<select name="kind"><option value="http">HTTP API</option><option value="filesystem">Dateisystem</option></select></label>
             <label>Endpoint-URL<input name="endpoint_url" type="url" placeholder="http://mock-target:8090/documents"></label>
+            <label>Ablageordner in data/<input name="directory" value="output" placeholder="output"></label>
+            <label>Ordnerstruktur<input name="path_template" value="{document_type}/{year}/{month}/{job_id}"><small>Platzhalter: document_type, year, month, job_id, reference</small></label>
             <label>Bearer-Token<input name="bearer_token" type="password" autocomplete="new-password" placeholder="optional"></label>
             <label>Timeout in Sekunden<input name="timeout_seconds" type="number" value="30" min="1" max="300" required></label>
             <label class="checkbox"><input name="enabled" type="checkbox" checked><span>Ziel sofort aktivieren</span></label>
             <label class="checkbox"><input name="is_default" type="checkbox"><span>Als Standardziel verwenden</span></label>
             <button class="button primary" type="submit">Zielsystem anlegen</button>
+          </form>
+        </aside>
+      </section>
+    </div>
+
+    <div id="automation-view" class="hidden">
+      <section class="hero channel-hero">
+        <div><p class="eyebrow">Automatisierung</p><h1>Wohin soll ein Dokument?</h1><p class="hero-copy">Lege verständliche Regeln für erkannte Dokumenttypen fest.</p></div>
+      </section>
+      <section class="channel-layout">
+        <div>
+          <div class="section-heading"><div><h2>Aktive Ablageregeln</h2><p>Die erste passende Regel bestimmt Zielsystem und Ordnerstruktur.</p></div><button id="reload-rules" class="icon-button" type="button" aria-label="Regeln aktualisieren">↻</button></div>
+          <div id="rule-list" class="channel-list" aria-live="polite"></div>
+        </div>
+        <aside class="channel-form-card">
+          <p class="eyebrow">Neue Regel</p><h2>Ablage automatisieren</h2>
+          <form id="rule-form" class="channel-form">
+            <label>Name<input name="name" placeholder="z. B. Rechnungen ablegen" required></label>
+            <label>Wenn Dokumenttyp<input name="document_type" placeholder="invoice" required></label>
+            <label>Dann an Zielsystem<select name="target_system_id" required></select></label>
+            <label>Im Unterordner<input name="path_template" value="{document_type}/{year}/{month}/{job_id}"><small>Leer lassen, um die Vorlage des Zielsystems zu verwenden.</small></label>
+            <label>Priorität<input name="priority" type="number" value="100" min="0" max="10000"></label>
+            <label class="checkbox"><input name="enabled" type="checkbox" checked><span>Regel sofort aktivieren</span></label>
+            <button class="button primary" type="submit">Regel anlegen</button>
           </form>
         </aside>
       </section>

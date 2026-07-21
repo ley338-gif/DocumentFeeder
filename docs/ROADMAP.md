@@ -15,6 +15,7 @@ Ziel: synthetisches Textdokument Ende-zu-Ende vom Eingang zum Dateisystem-Connec
 - Operator-Konsole für Übersicht, Vorschau, Review, Freigabe und Retry (MVP umgesetzt)
 - persistente Verwaltung mehrerer Hotfolder-Eingänge (MVP umgesetzt)
 - Zielsystemprofile und generischer HTTP-Connector mit Mock-Empfänger (MVP umgesetzt)
+- workfloworientierte Operator-Konsole und regelbasierte Dateiablage (MVP umgesetzt)
 - Authentisierung, Rollenmodell und produktionsfähiger Audit-Trail
 - Authentisierung, Audit-Events, Upload-Limits und Malware-Prüfung
 - Review-API/-UI für Quarantäne

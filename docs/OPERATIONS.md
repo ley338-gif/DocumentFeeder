@@ -58,6 +58,16 @@ den Compose-Mock verwendet `http://mock-target:8090/documents`. Neue Jobs speich
 des zu diesem Zeitpunkt aktiven Standardziels; ein späterer Standardwechsel verändert bereits
 eingegangene Jobs nicht.
 
+Dateisystemziele verwenden einen relativen Ablageordner innerhalb von
+`DOCUMENT_CORE_DATA_DIR`. Pfadvorlagen unterstützen `{document_type}`, `{year}`, `{month}`,
+`{job_id}` und `{reference}`. Absolute Pfade, `..` und unbekannte Platzhalter werden
+abgelehnt. Externe Windows- oder Netzwerkordner werden als Docker-Volume unterhalb von
+`/data` eingebunden und anschließend als relativer Zielordner konfiguriert.
+
+Ablageregeln unter `/v1/delivery-rules` überschreiben nach erfolgreicher Klassifikation das
+Standardziel. Beispiel: `invoice` → `Rechnungsarchiv` →
+`rechnungen/{year}/{month}/{job_id}`.
+
 HTTP-Fehler werden wie andere technische Verarbeitungsfehler über die Worker-Queue erneut
 versucht. `last_delivery_at` und `last_error` zeigen den letzten Zielzustand. Tokens liegen im
 MVP verschlüsselt **nicht** vor, sondern lediglich zugriffsgeschützt in der Datenbank. Für

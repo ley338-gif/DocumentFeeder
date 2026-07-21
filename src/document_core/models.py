@@ -48,6 +48,7 @@ class DocumentJob(BaseModel):
     document_type: str = "unknown"
     routing_reference: RoutingReference | None = None
     target_system_id: str | None = None
+    delivery_path_template: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     review_history: list[ReviewEvent] = Field(default_factory=list)
     text_preview: str = ""
@@ -105,6 +106,10 @@ class TargetSystem(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     kind: str = Field(pattern="^(filesystem|http)$")
     endpoint_url: str | None = Field(default=None, max_length=1000)
+    directory: str = Field(default="output", min_length=1, max_length=300)
+    path_template: str = Field(
+        default="{document_type}/{job_id}", min_length=1, max_length=500
+    )
     bearer_token: str | None = Field(default=None, max_length=2000, repr=False)
     timeout_seconds: int = Field(default=30, ge=1, le=300)
     enabled: bool = True
@@ -120,6 +125,8 @@ class TargetSystemView(BaseModel):
     name: str
     kind: str
     endpoint_url: str | None
+    directory: str
+    path_template: str
     has_bearer_token: bool
     timeout_seconds: int
     enabled: bool
@@ -134,6 +141,10 @@ class TargetSystemCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     kind: str = Field(pattern="^(filesystem|http)$")
     endpoint_url: str | None = Field(default=None, max_length=1000)
+    directory: str = Field(default="output", min_length=1, max_length=300)
+    path_template: str = Field(
+        default="{document_type}/{job_id}", min_length=1, max_length=500
+    )
     bearer_token: str | None = Field(default=None, max_length=2000)
     timeout_seconds: int = Field(default=30, ge=1, le=300)
     enabled: bool = True
@@ -143,8 +154,40 @@ class TargetSystemCreate(BaseModel):
 class TargetSystemUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
     endpoint_url: str | None = Field(default=None, max_length=1000)
+    directory: str | None = Field(default=None, min_length=1, max_length=300)
+    path_template: str | None = Field(default=None, min_length=1, max_length=500)
     bearer_token: str | None = Field(default=None, max_length=2000)
     clear_bearer_token: bool = False
     timeout_seconds: int | None = Field(default=None, ge=1, le=300)
     enabled: bool | None = None
     is_default: bool | None = None
+
+
+class DeliveryRule(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    name: str = Field(min_length=1, max_length=100)
+    document_type: str = Field(min_length=1, max_length=100)
+    target_system_id: str
+    path_template: str | None = Field(default=None, max_length=500)
+    enabled: bool = True
+    priority: int = Field(default=100, ge=0, le=10000)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class DeliveryRuleCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    document_type: str = Field(min_length=1, max_length=100)
+    target_system_id: str
+    path_template: str | None = Field(default=None, max_length=500)
+    enabled: bool = True
+    priority: int = Field(default=100, ge=0, le=10000)
+
+
+class DeliveryRuleUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    document_type: str | None = Field(default=None, min_length=1, max_length=100)
+    target_system_id: str | None = None
+    path_template: str | None = Field(default=None, max_length=500)
+    enabled: bool | None = None
+    priority: int | None = Field(default=None, ge=0, le=10000)

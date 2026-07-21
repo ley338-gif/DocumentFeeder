@@ -16,6 +16,7 @@ Document Core ist eine erweiterbare, domänenneutrale Dokumenten-Pipeline: Dokum
 - Workflow-Regeln (Pflichtfelder, Quarantäne)
 - generisches Connector-Interface, Dateisystem- und HTTP-Connector
 - persistente Zielsystemprofile mit Standardziel, Timeout und optionalem Bearer-Token
+- dokumenttypabhängige Ablageregeln und sichere Dateisystem-Pfadvorlagen
 - automatisierte Tests und Docker Compose
 
 KI wird erst hinter stabilen Interfaces ergänzt. Siehe [Roadmap](docs/ROADMAP.md).
@@ -31,7 +32,8 @@ curl http://localhost:8000/v1/jobs
 
 Die Operator-Konsole ist anschließend unter `http://localhost:8000/` erreichbar. Sie bietet
 Upload, Statusübersicht, Suche, Dokumentvorschau, Review, Freigabe, administrativen Retry
-und die Verwaltung mehrerer Hotfolder-Eingänge und Zielsysteme.
+und einen workfloworientierten Arbeitsbereich für Übersicht, Prüfung, Dokumente,
+Automatisierung und Einstellungen.
 
 Beim ersten Start wird `./data/hotfolder` als Standardkanal angelegt. Weitere Hotfolder
 lassen sich in der Operator-Konsole unter **Eingangskanäle** konfigurieren. Alle Pfade sind
@@ -88,6 +90,7 @@ Referenz: R-12345
 - `PATCH|DELETE /v1/input-channels/{channel_id}` – Eingangskanal ändern oder löschen
 - `GET|POST /v1/target-systems` – Zielsysteme auflisten oder anlegen
 - `PATCH|DELETE /v1/target-systems/{target_id}` – Zielsystem konfigurieren oder löschen
+- `GET|POST /v1/delivery-rules` – dokumenttypabhängige Ablageregeln verwalten
 - `GET /health` – Healthcheck
 
 OpenAPI/Swagger ist unter `http://localhost:8000/docs` verfügbar.

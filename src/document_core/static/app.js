@@ -1,6 +1,7 @@
 const state = {
   jobs: [], total: 0, limit: 20, offset: 0, selectedId: null,
-  selectedUpdatedAt: null, reviewDirty: false, targets: [], status: "", query: ""
+  selectedUpdatedAt: null, selectedStatus: null, reviewDirty: false, targets: [],
+  jobsSignature: null, statsSignature: null, status: "", query: ""
 };
 const labels = {
   received: "Eingegangen", processing: "In Verarbeitung", quarantined: "Zu prüfen",
@@ -39,8 +40,11 @@ async function loadHealth() {
   }
 }
 
-async function loadStats() {
+async function loadStats(force = false) {
   const stats = await api("/v1/jobs/stats");
+  const signature = JSON.stringify(stats);
+  if (!force && signature === state.statsSignature) return;
+  state.statsSignature = signature;
   const order = ["received", "processing", "quarantined", "failed", "delivering", "delivered"];
   $("#stats").innerHTML = order.map(status => `
     <button class="stat ${state.status === status ? "active" : ""}" data-status="${status}">
@@ -49,16 +53,20 @@ async function loadStats() {
   document.querySelectorAll(".stat").forEach(button => button.addEventListener("click", () => {
     state.status = state.status === button.dataset.status ? "" : button.dataset.status;
     state.offset = 0;
+    state.jobsSignature = null; state.statsSignature = null;
     $("#status-filter").value = state.status;
     refreshAll();
   }));
 }
 
-async function loadJobs() {
+async function loadJobs(force = false) {
   const params = new URLSearchParams({ limit: state.limit, offset: state.offset });
   if (state.status) params.append("status", state.status);
   if (state.query) params.set("q", state.query);
   const result = await api(`/v1/jobs?${params}`);
+  const signature = JSON.stringify(result);
+  if (!force && signature === state.jobsSignature) return;
+  state.jobsSignature = signature;
   state.jobs = result.items;
   state.total = result.total;
   renderJobs();
@@ -96,12 +104,15 @@ async function selectJob(id) {
 
 function renderDetail(job) {
   state.selectedUpdatedAt = job.updated_at;
+  state.selectedStatus = job.status;
   state.reviewDirty = false;
   const routing = job.routing_reference;
   const canReview = job.status === "quarantined";
   const canRelease = job.status === "quarantined";
   const canRetry = job.status === "failed";
   const previewUrl = `/v1/jobs/${job.id}/content`;
+  const target = state.targets.find(item => item.id === job.target_system_id);
+  const destination = job.metadata.destination_reference || "Wird bei Zustellung erzeugt";
   $("#detail-pane").innerHTML = `
     <div class="detail-header">
       <div class="detail-kicker"><span class="badge ${job.status}">${labels[job.status]}</span><span>${formatTime(job.updated_at)}</span></div>
@@ -123,6 +134,8 @@ function renderDetail(job) {
         <div class="facts">
           <div class="fact"><span>Dokumenttyp</span><strong>${esc(job.document_type)}</strong></div>
           <div class="fact"><span>Quelle</span><strong>${esc(job.source)}</strong></div>
+          <div class="fact"><span>Zielsystem</span><strong>${esc(target?.name || "Standardziel")}</strong></div>
+          <div class="fact"><span>Ablage / Zustellreferenz</span><strong>${esc(destination)}</strong></div>
           <div class="fact"><span>Versuche</span><strong>${job.attempt_count}</strong></div>
           <div class="fact"><span>Nächster Versuch</span><strong>${formatTime(job.next_attempt_at)}</strong></div>
           <div class="fact"><span>Routing</span><strong>${routing ? `${esc(routing.namespace)} / ${esc(routing.type)} / ${esc(routing.value)}` : "—"}</strong></div>
@@ -198,23 +211,34 @@ async function uploadFile(file) {
   } catch (error) { toast(error.message, true); }
 }
 
-async function refreshAll(includeStats = true) {
-  try { await Promise.all([loadJobs(), includeStats ? loadStats() : Promise.resolve(), loadHealth()]); }
+async function refreshAll(includeStats = true, force = false) {
+  try { await Promise.all([loadJobs(force), includeStats ? loadStats(force) : Promise.resolve(), loadHealth()]); }
   catch (error) { toast(error.message, true); }
 }
 
-function switchView(view) {
+function switchView(view, sourceButton = null) {
   $("#documents-view").classList.toggle("hidden", view !== "documents");
   $("#channels-view").classList.toggle("hidden", view !== "channels");
   $("#targets-view").classList.toggle("hidden", view !== "targets");
-  document.querySelectorAll(".nav-button").forEach(button => button.classList.toggle("active", button.dataset.view === view));
+  $("#automation-view").classList.toggle("hidden", view !== "automation");
+  if (sourceButton) {
+    document.querySelectorAll(".nav-button").forEach(button => button.classList.toggle("active", button === sourceButton));
+  }
+  if (view === "documents" && sourceButton) {
+    state.status = sourceButton.dataset.status === "all" ? "" : sourceButton.dataset.status;
+    state.offset = 0; state.jobsSignature = null; state.statsSignature = null;
+    $("#status-filter").value = state.status; refreshAll();
+  }
   if (view === "channels") loadChannels();
   if (view === "targets") loadTargets();
+  if (view === "automation") loadRules();
 }
 
 async function loadTargets() {
   try {
     state.targets = await api("/v1/target-systems");
+    const ruleTarget = $("#rule-form")?.elements.target_system_id;
+    if (ruleTarget) ruleTarget.innerHTML = state.targets.filter(target => target.enabled).map(target => `<option value="${target.id}">${esc(target.name)}</option>`).join("");
     const list = $("#target-list");
     list.innerHTML = state.targets.map(target => `
       <article class="channel-card">
@@ -224,12 +248,13 @@ async function loadTargets() {
             ${target.is_default ? '<span class="badge processing">Standard</span>' : ""}
             <h3>${esc(target.name)}</h3>
           </div>
-          <span class="channel-path">${target.kind === "http" ? esc(target.endpoint_url) : "data/output"}</span>
+          <span class="channel-path">${target.kind === "http" ? esc(target.endpoint_url) : `data/${esc(target.directory)}`}</span>
           <div class="channel-details">
             <span>Typ <strong>${esc(target.kind)}</strong></span>
             <span>Timeout <strong>${target.timeout_seconds}s</strong></span>
             <span>Letzte Zustellung <strong>${formatTime(target.last_delivery_at)}</strong></span>
             <span>Token <strong>${target.has_bearer_token ? "hinterlegt" : "—"}</strong></span>
+            ${target.kind === "filesystem" ? `<span>Ablage <strong>data/${esc(target.directory)}/${esc(target.path_template)}</strong></span>` : ""}
           </div>
           ${target.last_error ? `<div class="channel-error">${esc(target.last_error)}</div>` : ""}
         </div>
@@ -265,6 +290,8 @@ async function createTarget(event) {
   const body = {
     name: form.get("name"), kind,
     endpoint_url: kind === "http" ? form.get("endpoint_url") : null,
+    directory: form.get("directory") || "output",
+    path_template: form.get("path_template") || "{document_type}/{job_id}",
     bearer_token: form.get("bearer_token") || null,
     timeout_seconds: Number(form.get("timeout_seconds")),
     enabled: form.get("enabled") === "on", is_default: form.get("is_default") === "on"
@@ -274,6 +301,37 @@ async function createTarget(event) {
     event.currentTarget.reset(); event.currentTarget.elements.enabled.checked = true; event.currentTarget.elements.timeout_seconds.value = 30;
     toast("Zielsystem angelegt"); await loadTargets();
   } catch (error) { toast(error.message, true); }
+}
+
+async function loadRules() {
+  try {
+    await loadTargets();
+    const rules = await api("/v1/delivery-rules");
+    $("#rule-list").innerHTML = rules.length ? rules.map(rule => {
+      const target = state.targets.find(item => item.id === rule.target_system_id);
+      return `<article class="channel-card"><div><div class="job-title"><span class="badge ${rule.enabled ? "delivered" : "received"}">${rule.enabled ? "Aktiv" : "Pausiert"}</span><h3>${esc(rule.name)}</h3></div><p class="rule-sentence">Wenn <strong>${esc(rule.document_type)}</strong>, dann an <strong>${esc(target?.name || "Unbekannt")}</strong>.</p><span class="channel-path">${esc(rule.path_template || target?.path_template || "Zielvorlage")}</span></div><div class="channel-actions"><button class="button rule-toggle" data-id="${rule.id}" data-enabled="${rule.enabled}" type="button">${rule.enabled ? "Pausieren" : "Aktivieren"}</button><button class="button danger rule-delete" data-id="${rule.id}" type="button">Löschen</button></div></article>`;
+    }).join("") : '<div class="empty-list"><strong>Noch keine Ablageregeln</strong><br><span>Ohne Regel gilt das Standardziel.</span></div>';
+    document.querySelectorAll(".rule-toggle").forEach(button => button.addEventListener("click", () => updateRule(button.dataset.id, {enabled: button.dataset.enabled !== "true"})));
+    document.querySelectorAll(".rule-delete").forEach(button => button.addEventListener("click", () => deleteRule(button.dataset.id)));
+  } catch (error) { toast(error.message, true); }
+}
+
+async function updateRule(id, body) {
+  try { await api(`/v1/delivery-rules/${id}`, {method:"PATCH", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)}); toast("Regel aktualisiert"); await loadRules(); }
+  catch (error) { toast(error.message, true); }
+}
+
+async function deleteRule(id) {
+  if (!window.confirm("Ablageregel löschen?")) return;
+  try { await api(`/v1/delivery-rules/${id}`, {method:"DELETE"}); toast("Regel gelöscht"); await loadRules(); }
+  catch (error) { toast(error.message, true); }
+}
+
+async function createRule(event) {
+  event.preventDefault(); const form = new FormData(event.currentTarget);
+  const body = {name:form.get("name"), document_type:form.get("document_type"), target_system_id:form.get("target_system_id"), path_template:form.get("path_template") || null, priority:Number(form.get("priority")), enabled:form.get("enabled") === "on"};
+  try { await api("/v1/delivery-rules", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)}); event.currentTarget.reset(); event.currentTarget.elements.enabled.checked = true; event.currentTarget.elements.priority.value = 100; toast("Ablageregel angelegt"); await loadRules(); }
+  catch (error) { toast(error.message, true); }
 }
 
 async function loadChannels() {
@@ -337,22 +395,26 @@ async function createChannel(event) {
 }
 
 $("#file-upload").addEventListener("change", event => { if (event.target.files[0]) uploadFile(event.target.files[0]); event.target.value = ""; });
-$("#refresh").addEventListener("click", () => refreshAll());
-$("#status-filter").addEventListener("change", event => { state.status = event.target.value; state.offset = 0; refreshAll(); });
-$("#search").addEventListener("input", event => { window.clearTimeout(state.searchTimer); state.searchTimer = window.setTimeout(() => { state.query = event.target.value.trim(); state.offset = 0; loadJobs(); }, 250); });
-$("#previous").addEventListener("click", () => { state.offset = Math.max(0, state.offset - state.limit); loadJobs(); });
-$("#next").addEventListener("click", () => { state.offset += state.limit; loadJobs(); });
-document.querySelectorAll(".nav-button").forEach(button => button.addEventListener("click", () => switchView(button.dataset.view)));
+$("#refresh").addEventListener("click", () => refreshAll(true, true));
+$("#status-filter").addEventListener("change", event => { state.status = event.target.value; state.offset = 0; state.jobsSignature = null; state.statsSignature = null; refreshAll(); });
+$("#search").addEventListener("input", event => { window.clearTimeout(state.searchTimer); state.searchTimer = window.setTimeout(() => { state.query = event.target.value.trim(); state.offset = 0; state.jobsSignature = null; loadJobs(); }, 250); });
+$("#previous").addEventListener("click", () => { state.offset = Math.max(0, state.offset - state.limit); state.jobsSignature = null; loadJobs(); });
+$("#next").addEventListener("click", () => { state.offset += state.limit; state.jobsSignature = null; loadJobs(); });
+document.querySelectorAll(".nav-button").forEach(button => button.addEventListener("click", () => switchView(button.dataset.view, button)));
 $("#channel-form").addEventListener("submit", createChannel);
 $("#reload-channels").addEventListener("click", loadChannels);
 $("#target-form").addEventListener("submit", createTarget);
 $("#reload-targets").addEventListener("click", loadTargets);
+$("#rule-form").addEventListener("submit", createRule);
+$("#reload-rules").addEventListener("click", loadRules);
+$("#show-targets").addEventListener("click", () => switchView("targets"));
+$("#show-channels").addEventListener("click", () => switchView("channels"));
 
 loadTargets();
 refreshAll();
 window.setInterval(async () => {
   await refreshAll();
-  if (state.selectedId) {
+  if (state.selectedId && ["received", "processing", "delivering"].includes(state.selectedStatus)) {
     try {
       const job = await api(`/v1/jobs/${state.selectedId}`);
       if (!state.reviewDirty && job.updated_at !== state.selectedUpdatedAt) renderDetail(job);

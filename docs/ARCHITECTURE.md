@@ -58,6 +58,11 @@ Standardziels am Job fixiert. Die Pipeline erzeugt daraus bei der Zustellung den
 Dateisystem- oder HTTP-Connector. Dadurch bleiben Transportkonfiguration, Verarbeitung und
 fachliche Review-Entscheidung voneinander getrennt.
 
+Nach der regelbasierten Klassifikation sucht die Pipeline die erste aktive `DeliveryRule`
+für den Dokumenttyp. Eine Regel kann Zielsystem und Pfadvorlage überschreiben. Die konkrete
+Pfadauflösung erfolgt erst im Dateisystem-Connector und bleibt auf dessen konfigurierten
+Ablageordner begrenzt.
+
 Quarantänisierte Jobs können manuell klassifiziert, mit einer generischen `routing_reference`
 versehen und anschließend erneut validiert werden. Die Freigabe ist idempotent und vom Review
 getrennt; Connector-spezifische Policies bestimmen, ob eine Routing-Referenz Pflicht ist.

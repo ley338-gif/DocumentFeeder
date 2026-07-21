@@ -47,6 +47,7 @@ class DocumentPipeline:
             job.text_preview = extraction.text[:500]
             job.document_type, job.metadata = self.processor.process(extraction.text)
             job.metadata.update(extraction.metadata())
+            self._apply_delivery_rule(job)
             job.errors = self.rules.validate(job.document_type, job.routing_reference is not None)
             if job.errors:
                 job.status = JobStatus.QUARANTINED
@@ -98,6 +99,9 @@ class DocumentPipeline:
                 "to": request.target_system_id,
             }
             job.target_system_id = request.target_system_id
+            job.delivery_path_template = target.path_template
+        elif request.document_type is not None:
+            self._apply_delivery_rule(job)
         job.review_history.append(
             ReviewEvent(reviewer=request.reviewer, reason=request.reason, changes=changes)
         )
@@ -131,7 +135,10 @@ class DocumentPipeline:
         if target is None or not target.enabled:
             raise RuntimeError("Konfiguriertes Zielsystem ist nicht vorhanden oder deaktiviert")
         if target.kind == "filesystem":
-            return FilesystemConnector(self.settings.output_dir)
+            return FilesystemConnector(
+                self.settings.data_dir / target.directory,
+                target.path_template,
+            )
         if target.kind == "http":
             return HttpConnector(target)
         raise RuntimeError(f"Nicht unterstützter Connector-Typ: {target.kind}")
@@ -154,3 +161,21 @@ class DocumentPipeline:
                 target.last_error = str(exc)
                 getattr(self.store, "save_target_system")(target)
             raise
+
+    def _apply_delivery_rule(self, job: DocumentJob) -> None:
+        rule = getattr(self.store, "find_delivery_rule", lambda _type: None)(job.document_type)
+        if rule is not None:
+            target = getattr(self.store, "get_target_system", lambda _id: None)(
+                rule.target_system_id
+            )
+            if target is not None and target.enabled:
+                job.target_system_id = target.id
+                job.delivery_path_template = rule.path_template or target.path_template
+                job.metadata["delivery_rule"] = rule.name
+                return
+        if job.target_system_id:
+            target = getattr(self.store, "get_target_system", lambda _id: None)(
+                job.target_system_id
+            )
+            if target is not None:
+                job.delivery_path_template = target.path_template

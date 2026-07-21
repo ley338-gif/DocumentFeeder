@@ -1,0 +1,17 @@
+README.md
+pyproject.toml
+src/document_core/__init__.py
+src/document_core/api.py
+src/document_core/config.py
+src/document_core/connectors.py
+src/document_core/models.py
+src/document_core/pipeline.py
+src/document_core/processing.py
+src/document_core/store.py
+src/document_core.egg-info/PKG-INFO
+src/document_core.egg-info/SOURCES.txt
+src/document_core.egg-info/dependency_links.txt
+src/document_core.egg-info/requires.txt
+src/document_core.egg-info/top_level.txt
+tests/test_pipeline.py
+tests/test_processing.py

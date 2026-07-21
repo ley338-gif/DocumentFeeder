@@ -1,0 +1,43 @@
+name: Feature
+description: Geplante Erweiterung mit überprüfbaren Akzeptanzkriterien
+title: "[Feature]: "
+labels: ["type:feature", "status:triage"]
+body:
+  - type: markdown
+    attributes:
+      value: "Keine echten Patienten- oder Gesundheitsdaten eintragen."
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Ziel/Nutzen
+      description: Welches Ergebnis soll für wen entstehen?
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Umfang
+      description: In Scope und ausdrücklich nicht in Scope
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Akzeptanzkriterien
+      placeholder: "- [ ] Gegeben ... wenn ... dann ..."
+    validations:
+      required: true
+  - type: textarea
+    id: privacy
+    attributes:
+      label: Security/Datenschutz
+      description: Datenklassen, Risiken, Berechtigungen, Audit und Löschung
+    validations:
+      required: true
+  - type: textarea
+    id: docs
+    attributes:
+      label: Tests und Dokumentation
+    validations:
+      required: true
+

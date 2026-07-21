@@ -1,0 +1,25 @@
+from pathlib import Path
+
+from document_core.config import Settings
+from document_core.connectors import FilesystemConnector
+from document_core.models import JobStatus
+from document_core.pipeline import DocumentPipeline
+from document_core.store import JobStore
+
+
+def test_text_document_reaches_filesystem_connector(tmp_path: Path):
+    settings = Settings(data_dir=tmp_path)
+    settings.create_directories()
+    source = tmp_path / "arztbrief.txt"
+    source.write_text("Arztbrief\nPatient: Max Muster\nFallnummer: X-1", encoding="utf-8")
+    pipeline = DocumentPipeline(settings, JobStore(settings.jobs_dir), FilesystemConnector(settings.output_dir))
+
+    job = pipeline.ingest(source, "test")
+
+    assert job.status == JobStatus.DELIVERED
+    assert Path(job.metadata["destination_reference"]).exists()
+    assert (settings.output_dir / "arztbrief" / job.id / "metadata.json").exists()
+
+    duplicate = pipeline.ingest(source, "test")
+    assert duplicate.id == job.id
+    assert len(pipeline.store.list()) == 1

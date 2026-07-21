@@ -1,0 +1,40 @@
+name: Fehler
+description: Reproduzierbaren Fehler melden
+title: "[Bug]: "
+labels: ["type:bug", "status:triage"]
+body:
+  - type: markdown
+    attributes:
+      value: "Logs anonymisieren; keine echten Patienten- oder Gesundheitsdaten eintragen."
+  - type: textarea
+    id: observed
+    attributes:
+      label: Beobachtetes Verhalten
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Erwartetes Verhalten
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduktion mit synthetischen Daten
+      placeholder: "1. ...\n2. ..."
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version/Commit
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Auswirkung und mögliche Datenschutzrelevanz
+    validations:
+      required: true
+

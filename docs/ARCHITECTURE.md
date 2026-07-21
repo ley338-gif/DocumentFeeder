@@ -23,7 +23,7 @@ flowchart LR
 
 ## Komponenten
 
-- `api.py`: HTTP-Eingang und Hotfolder-Lifecycle.
+- `api.py`: HTTP-Eingang, Kanalverwaltung und Hotfolder-Lifecycle.
 - `pipeline.py`: Orchestrierung und Statusübergänge.
 - `processing.py`: Text/OCR, Regeln und später KI-Strategien.
 - `connectors.py`: Zielsystemvertrag und Referenzimplementierung.
@@ -49,6 +49,15 @@ endet ein technischer Fehler in `failed`.
 
 Jeder Job besitzt ID, Hash, Quelle, Originalname, Status, Metadaten, Fehler und Zeitstempel. Review-Entscheidungen werden mit Bearbeiter, Begründung und Änderungen protokolliert. Für Produktion sind Rollen/Rechte, Verschlüsselung, Aufbewahrung und Löschkonzepte vor Verarbeitung echter Fachdaten verpflichtend.
 
+Hotfolder-Eingänge sind als `InputChannel` in der SQL-Datenbank gespeichert. Der API-Prozess
+liest aktive Kanäle zyklisch, beschränkt ihre Verzeichnisse auf das gemeinsame Datenverzeichnis
+und reicht passende Dateien an dieselbe Ingestion-Pipeline wie der HTTP-Upload weiter.
+
+Zielsysteme sind persistente `TargetSystem`-Profile. Beim Ingest wird die ID des aktuellen
+Standardziels am Job fixiert. Die Pipeline erzeugt daraus bei der Zustellung den passenden
+Dateisystem- oder HTTP-Connector. Dadurch bleiben Transportkonfiguration, Verarbeitung und
+fachliche Review-Entscheidung voneinander getrennt.
+
 Quarantänisierte Jobs können manuell klassifiziert, mit einer generischen `routing_reference`
 versehen und anschließend erneut validiert werden. Die Freigabe ist idempotent und vom Review
 getrennt; Connector-spezifische Policies bestimmen, ob eine Routing-Referenz Pflicht ist.
@@ -56,8 +65,7 @@ getrennt; Connector-spezifische Policies bestimmen, ob eine Routing-Referenz Pfl
 ## Nächste technische Grenzen
 
 - Als nächster Robustheitsschritt sollten Worker-Metriken, kontrolliertes Shutdown und
-  ein administrativer Retry-Endpunkt ergänzt werden.
-- Der synchrone Prozessor wird ein Worker; die API antwortet dann mit `202 Accepted`.
+  eine belastbare Fehleranzeige für Eingangskanäle ergänzt werden.
 - PDF-Text-Layer und mehrseitiger OCR-Fallback sind implementiert; als nächster Schritt
   sollte die Extraktion hinter ein explizites Adapter-Interface gezogen werden.
 - KI liefert Vorschlag, Konfidenz, Modellversion und Evidenz; Workflow-Schwellen entscheiden über Auto-Übernahme oder Review.

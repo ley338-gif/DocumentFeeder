@@ -16,6 +16,29 @@ die dokumentierte `/v1`-API.
 - Freigabe quarantänisierter Dokumente
 - administrativer Retry endgültig fehlgeschlagener Jobs
 - automatische Aktualisierung im Vier-Sekunden-Intervall
+- Eingangskanäle mit Name, Unterordner, Dateimustern und Aktivstatus verwalten
+- Zielsysteme verwalten, Standardziel festlegen und im Review auswählen
+
+## Eingangskanäle
+
+Die Navigation **Eingangskanäle** zeigt alle persistent konfigurierten Hotfolder. Ein Kanal
+verweist immer auf einen Unterordner des konfigurierten `data`-Verzeichnisses. Mehrere
+Dateimuster werden kommagetrennt eingegeben, zum Beispiel `*.pdf, scan-*.tif`. Deaktivieren
+pausiert die Abholung, ohne Konfiguration oder vorhandene Dateien zu löschen.
+
+Beim ersten Start erzeugt der Dienst automatisch den Kanal `Standard-Hotfolder` für den
+Unterordner `hotfolder`. Das Löschen eines Kanals entfernt nur den Datenbankeintrag; der
+Ordner und darin liegende Dateien bleiben erhalten.
+
+## Zielsysteme
+
+Unter **Zielsysteme** werden Dateisystem- und HTTP-Ziele persistent konfiguriert. Genau ein
+aktives Ziel ist Standard und wird neuen Jobs beim Eingang fest zugeordnet. Im manuellen
+Review kann für quarantänisierte Dokumente ein anderes aktives Ziel gewählt werden.
+
+Bearer-Tokens sind nach dem Speichern nicht mehr sichtbar. Die Oberfläche zeigt lediglich,
+ob ein Token hinterlegt ist. Das Standardziel kann weder pausiert noch gelöscht werden;
+zuerst muss ein anderes Ziel zum Standard gemacht werden.
 
 ## API-Verträge
 
@@ -28,6 +51,14 @@ konfigurierten Inbox-Verzeichnisses liegt.
 
 `POST /v1/jobs/{id}/retry` ist nur für `failed` erlaubt. Der Vorgang setzt Versuche und
 technischen Fehlerzustand zurück und plant den Job erneut als `received` ein.
+
+`GET`, `POST`, `PATCH` und `DELETE` unter `/v1/input-channels` bilden die Kanalverwaltung
+ab. Absolute Pfade, Pfadwechsel mit `..` und Dateimuster mit Verzeichnisteilen werden mit
+`422` abgelehnt. Doppelte Namen oder Ordner liefern `409`.
+
+Die entsprechenden Operationen unter `/v1/target-systems` verwalten Zielprofile. HTTP-Ziele
+benötigen eine gültige HTTP(S)-URL. Antworten verwenden `TargetSystemView` und enthalten
+niemals das gespeicherte Token.
 
 ## Sicherheitsgrenze des MVP
 

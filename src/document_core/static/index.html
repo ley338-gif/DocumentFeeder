@@ -13,10 +13,16 @@
       <span class="brand-mark" aria-hidden="true">DC</span>
       <span><strong>Document Core</strong><small>Operator Console</small></span>
     </a>
+    <nav class="main-nav" aria-label="Hauptnavigation">
+      <button class="nav-button active" data-view="documents" type="button">Dokumente</button>
+      <button class="nav-button" data-view="channels" type="button">Eingangskanäle</button>
+      <button class="nav-button" data-view="targets" type="button">Zielsysteme</button>
+    </nav>
     <div class="system-state"><span id="health-dot" class="health-dot"></span><span id="health-text">System wird geprüft</span></div>
   </header>
 
   <main>
+    <div id="documents-view">
     <section class="hero">
       <div>
         <p class="eyebrow">Dokumentenfluss</p>
@@ -65,6 +71,64 @@
         </div>
       </aside>
     </section>
+    </div>
+
+    <div id="channels-view" class="hidden">
+      <section class="hero channel-hero">
+        <div>
+          <p class="eyebrow">Konfiguration</p>
+          <h1>Eingangskanäle</h1>
+          <p class="hero-copy">Hotfolder benennen, filtern und im laufenden Betrieb steuern.</p>
+        </div>
+      </section>
+      <section class="channel-layout">
+        <div>
+          <div class="section-heading"><div><h2>Konfigurierte Kanäle</h2><p>Alle Pfade liegen sicher innerhalb des Datenverzeichnisses.</p></div><button id="reload-channels" class="icon-button" type="button" aria-label="Kanäle aktualisieren">↻</button></div>
+          <div id="channel-list" class="channel-list" aria-live="polite"></div>
+        </div>
+        <aside class="channel-form-card">
+          <p class="eyebrow">Neuer Kanal</p>
+          <h2>Hotfolder anlegen</h2>
+          <form id="channel-form" class="channel-form">
+            <label>Name<input name="name" placeholder="z. B. Scanner Eingang" required maxlength="100"></label>
+            <label>Unterordner in data/<input name="directory" placeholder="scanner-eingang" required maxlength="300"></label>
+            <label>Dateimuster<input name="patterns" value="*.pdf, *.txt" required><small>Kommagetrennt, beispielsweise *.pdf, scan-*.tif</small></label>
+            <label class="checkbox"><input name="enabled" type="checkbox" checked><span>Kanal sofort aktivieren</span></label>
+            <button class="button primary" type="submit">Kanal anlegen</button>
+          </form>
+        </aside>
+      </section>
+    </div>
+
+    <div id="targets-view" class="hidden">
+      <section class="hero channel-hero">
+        <div>
+          <p class="eyebrow">Zustellung</p>
+          <h1>Zielsysteme</h1>
+          <p class="hero-copy">Dateisystem- und HTTP-Ziele konfigurieren und als Standard festlegen.</p>
+        </div>
+      </section>
+      <section class="channel-layout">
+        <div>
+          <div class="section-heading"><div><h2>Konfigurierte Ziele</h2><p>Neue Dokumente werden dem aktiven Standardziel zugeordnet.</p></div><button id="reload-targets" class="icon-button" type="button" aria-label="Zielsysteme aktualisieren">↻</button></div>
+          <div id="target-list" class="channel-list" aria-live="polite"></div>
+        </div>
+        <aside class="channel-form-card">
+          <p class="eyebrow">Neues Ziel</p>
+          <h2>Zielsystem anlegen</h2>
+          <form id="target-form" class="channel-form">
+            <label>Name<input name="name" placeholder="z. B. Archiv Sandbox" required maxlength="100"></label>
+            <label>Connector-Typ<select name="kind"><option value="http">HTTP API</option><option value="filesystem">Dateisystem</option></select></label>
+            <label>Endpoint-URL<input name="endpoint_url" type="url" placeholder="http://mock-target:8090/documents"></label>
+            <label>Bearer-Token<input name="bearer_token" type="password" autocomplete="new-password" placeholder="optional"></label>
+            <label>Timeout in Sekunden<input name="timeout_seconds" type="number" value="30" min="1" max="300" required></label>
+            <label class="checkbox"><input name="enabled" type="checkbox" checked><span>Ziel sofort aktivieren</span></label>
+            <label class="checkbox"><input name="is_default" type="checkbox"><span>Als Standardziel verwenden</span></label>
+            <button class="button primary" type="submit">Zielsystem anlegen</button>
+          </form>
+        </aside>
+      </section>
+    </div>
   </main>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>

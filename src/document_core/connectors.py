@@ -1,9 +1,12 @@
+import base64
 import json
 import shutil
+import urllib.error
+import urllib.request
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-from .models import DocumentJob
+from .models import DocumentJob, TargetSystem
 
 
 class TargetConnector(ABC):
@@ -35,3 +38,54 @@ class FilesystemConnector(TargetConnector):
 
     def healthcheck(self) -> bool:
         return self.output_dir.is_dir()
+
+
+class HttpConnector(TargetConnector):
+    def __init__(self, target: TargetSystem):
+        if not target.endpoint_url:
+            raise ValueError("HTTP-Ziel benötigt eine Endpoint-URL")
+        self.target = target
+
+    def deliver(self, job: DocumentJob) -> str:
+        payload = {
+            "job_id": job.id,
+            "filename": job.original_filename,
+            "content_type": "application/octet-stream",
+            "content_base64": base64.b64encode(job.stored_path.read_bytes()).decode("ascii"),
+            "document_type": job.document_type,
+            "routing_reference": (
+                job.routing_reference.model_dump(mode="json") if job.routing_reference else None
+            ),
+            "metadata": job.metadata,
+        }
+        headers = {
+            "Content-Type": "application/json",
+            "Idempotency-Key": job.id,
+            "User-Agent": "Document-Core/0.1",
+        }
+        if self.target.bearer_token:
+            headers["Authorization"] = f"Bearer {self.target.bearer_token}"
+        request = urllib.request.Request(
+            self.target.endpoint_url,
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers=headers,
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=self.target.timeout_seconds) as response:
+                body = response.read().decode("utf-8")
+                data = json.loads(body) if body else {}
+                return str(
+                    data.get("reference")
+                    or data.get("id")
+                    or response.headers.get("Location")
+                    or f"http:{response.status}:{job.id}"
+                )
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")[:500]
+            raise RuntimeError(f"HTTP-Ziel antwortete mit {exc.code}: {detail}") from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(f"HTTP-Ziel nicht erreichbar: {exc.reason}") from exc
+
+    def healthcheck(self) -> bool:
+        return bool(self.target.endpoint_url)

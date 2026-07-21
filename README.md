@@ -7,13 +7,15 @@ Document Core ist eine erweiterbare, domänenneutrale Dokumenten-Pipeline: Dokum
 **Phase 1 – funktionierende Pipeline ohne KI.** Das MVP enthält:
 
 - REST-API und Hotfolder als Eingangskanäle
+- persistente Verwaltung mehrerer Hotfolder mit Dateimustern und Aktivstatus
 - SHA-256-Deduplizierung und persistente Job-Metadaten
 - PostgreSQL-Persistenz mit Alembic-Migrationen und atomaren Statuswechseln
 - asynchrone PostgreSQL-Queue mit separatem Worker, Lease-Recovery und Retry
 - PDF-Text-Layer und seitenweiser OCR-Fallback mit Tesseract
 - regelbasierte Dokumenttyp- und Metadatenextraktion
 - Workflow-Regeln (Pflichtfelder, Quarantäne)
-- generisches Connector-Interface und Dateisystem-Connector
+- generisches Connector-Interface, Dateisystem- und HTTP-Connector
+- persistente Zielsystemprofile mit Standardziel, Timeout und optionalem Bearer-Token
 - automatisierte Tests und Docker Compose
 
 KI wird erst hinter stabilen Interfaces ergänzt. Siehe [Roadmap](docs/ROADMAP.md).
@@ -28,9 +30,13 @@ curl http://localhost:8000/v1/jobs
 ```
 
 Die Operator-Konsole ist anschließend unter `http://localhost:8000/` erreichbar. Sie bietet
-Upload, Statusübersicht, Suche, Dokumentvorschau, Review, Freigabe und administrativen Retry.
+Upload, Statusübersicht, Suche, Dokumentvorschau, Review, Freigabe, administrativen Retry
+und die Verwaltung mehrerer Hotfolder-Eingänge und Zielsysteme.
 
-Hotfolder: Dateien nach `./data/hotfolder` kopieren. Erfolgreiche Ergebnisse landen strukturiert unter `./data/output`, problematische Dokumente unter `./data/quarantine`.
+Beim ersten Start wird `./data/hotfolder` als Standardkanal angelegt. Weitere Hotfolder
+lassen sich in der Operator-Konsole unter **Eingangskanäle** konfigurieren. Alle Pfade sind
+Unterordner von `./data`; erfolgreiche Ergebnisse landen strukturiert unter `./data/output`,
+problematische Dokumente unter `./data/quarantine`.
 
 Docker Compose startet API, Worker und PostgreSQL. Uploads antworten sofort mit
 `202 Accepted` und Status `received`. Der Worker beansprucht Jobs atomar, erneuert während
@@ -78,6 +84,10 @@ Referenz: R-12345
 - `PATCH /v1/jobs/{job_id}/review` – quarantänisierten Job korrigieren
 - `POST /v1/jobs/{job_id}/release` – geprüften Job freigeben
 - `POST /v1/jobs/{job_id}/retry` – endgültig fehlgeschlagenen Job neu einplanen
+- `GET|POST /v1/input-channels` – Eingangskanäle auflisten oder anlegen
+- `PATCH|DELETE /v1/input-channels/{channel_id}` – Eingangskanal ändern oder löschen
+- `GET|POST /v1/target-systems` – Zielsysteme auflisten oder anlegen
+- `PATCH|DELETE /v1/target-systems/{target_id}` – Zielsystem konfigurieren oder löschen
 - `GET /health` – Healthcheck
 
 OpenAPI/Swagger ist unter `http://localhost:8000/docs` verfügbar.

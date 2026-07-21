@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from .config import Settings
-from .connectors import TargetConnector
+from .connectors import FilesystemConnector, HttpConnector, TargetConnector
 from .models import DocumentJob, JobStatus, ReviewEvent, ReviewRequest
 from .processing import RuleBasedProcessor, TextExtractor, WorkflowRules
 from .store import JobRepository
@@ -27,6 +27,11 @@ class DocumentPipeline:
             original_filename=filename,
             stored_path=self.settings.inbox_dir / f"{content_hash[:12]}-{filename}",
             sha256=content_hash,
+            target_system_id=(
+                target.id
+                if (target := getattr(self.store, "get_default_target_system", lambda: None)())
+                else None
+            ),
         )
         shutil.copy2(source_path, job.stored_path)
         persisted, _ = self.store.create_if_absent(job)
@@ -48,7 +53,7 @@ class DocumentPipeline:
                 target = self.settings.quarantine_dir / f"{job.id}-{job.original_filename}"
                 shutil.copy2(job.stored_path, target)
             else:
-                job.metadata["destination_reference"] = self.connector.deliver(job)
+                job.metadata["destination_reference"] = self._deliver(job)
                 job.status = JobStatus.DELIVERED
             job.last_error = None
             job.next_attempt_at = None
@@ -82,6 +87,17 @@ class DocumentPipeline:
         if request.metadata:
             changes["metadata"] = request.metadata
             job.metadata.update(request.metadata)
+        if request.target_system_id is not None and request.target_system_id != job.target_system_id:
+            target = getattr(self.store, "get_target_system", lambda _id: None)(
+                request.target_system_id
+            )
+            if target is None or not target.enabled:
+                raise ValueError("Zielsystem ist nicht vorhanden oder deaktiviert")
+            changes["target_system_id"] = {
+                "from": job.target_system_id,
+                "to": request.target_system_id,
+            }
+            job.target_system_id = request.target_system_id
         job.review_history.append(
             ReviewEvent(reviewer=request.reviewer, reason=request.reason, changes=changes)
         )
@@ -100,10 +116,41 @@ class DocumentPipeline:
             return self.store.get(job.id) or job
         job.status = JobStatus.DELIVERING
         try:
-            job.metadata["destination_reference"] = self.connector.deliver(job)
+            job.metadata["destination_reference"] = self._deliver(job)
             job.status = JobStatus.DELIVERED
         except Exception as exc:
             job.errors.append(str(exc))
             job.status = JobStatus.FAILED
         self.store.save(job)
         return job
+
+    def _connector_for(self, job: DocumentJob) -> TargetConnector:
+        if not job.target_system_id:
+            return self.connector
+        target = getattr(self.store, "get_target_system", lambda _id: None)(job.target_system_id)
+        if target is None or not target.enabled:
+            raise RuntimeError("Konfiguriertes Zielsystem ist nicht vorhanden oder deaktiviert")
+        if target.kind == "filesystem":
+            return FilesystemConnector(self.settings.output_dir)
+        if target.kind == "http":
+            return HttpConnector(target)
+        raise RuntimeError(f"Nicht unterstützter Connector-Typ: {target.kind}")
+
+    def _deliver(self, job: DocumentJob) -> str:
+        target = (
+            getattr(self.store, "get_target_system", lambda _id: None)(job.target_system_id)
+            if job.target_system_id
+            else None
+        )
+        try:
+            reference = self._connector_for(job).deliver(job)
+            if target is not None:
+                target.last_delivery_at = datetime.now(UTC)
+                target.last_error = None
+                getattr(self.store, "save_target_system")(target)
+            return reference
+        except Exception as exc:
+            if target is not None:
+                target.last_error = str(exc)
+                getattr(self.store, "save_target_system")(target)
+            raise

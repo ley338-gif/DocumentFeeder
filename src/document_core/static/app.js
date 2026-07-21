@@ -1,4 +1,7 @@
-const state = { jobs: [], total: 0, limit: 20, offset: 0, selectedId: null, status: "", query: "" };
+const state = {
+  jobs: [], total: 0, limit: 20, offset: 0, selectedId: null,
+  selectedUpdatedAt: null, reviewDirty: false, targets: [], status: "", query: ""
+};
 const labels = {
   received: "Eingegangen", processing: "In Verarbeitung", quarantined: "Zu prüfen",
   delivering: "In Zustellung", delivered: "Zugestellt", failed: "Fehlgeschlagen"
@@ -84,6 +87,7 @@ function renderJobs() {
 }
 
 async function selectJob(id) {
+  if (state.selectedId !== id) state.reviewDirty = false;
   state.selectedId = id;
   renderJobs();
   try { renderDetail(await api(`/v1/jobs/${id}`)); }
@@ -91,6 +95,8 @@ async function selectJob(id) {
 }
 
 function renderDetail(job) {
+  state.selectedUpdatedAt = job.updated_at;
+  state.reviewDirty = false;
   const routing = job.routing_reference;
   const canReview = job.status === "quarantined";
   const canRelease = job.status === "quarantined";
@@ -131,12 +137,16 @@ function renderDetail(job) {
       ${historyPanel(job)}
     </div>`;
   $("#review-form")?.addEventListener("submit", submitReview);
+  $("#review-form")?.addEventListener("input", () => { state.reviewDirty = true; });
   $("#release-job")?.addEventListener("click", () => mutateJob(`/v1/jobs/${job.id}/release`, "POST", "Dokument freigegeben"));
   $("#retry-job")?.addEventListener("click", () => mutateJob(`/v1/jobs/${job.id}/retry`, "POST", "Retry eingeplant"));
 }
 
 function reviewForm(job) {
   const routing = job.routing_reference || {};
+  const targetOptions = state.targets.filter(target => target.enabled).map(target =>
+    `<option value="${target.id}" ${target.id === job.target_system_id ? "selected" : ""}>${esc(target.name)} (${esc(target.kind)})</option>`
+  ).join("");
   return `<section class="panel">
     <div class="panel-header"><h3>Manuelle Prüfung</h3></div>
     <form id="review-form" class="review-form" data-id="${job.id}">
@@ -144,6 +154,7 @@ function reviewForm(job) {
       <label>Bearbeiter<input name="reviewer" autocomplete="name" required></label>
       <label>Namespace<input name="namespace" value="${esc(routing.namespace || "")}" required></label>
       <label>Referenztyp<input name="reference_type" value="${esc(routing.type || "record")}" required></label>
+      <label>Zielsystem<select name="target_system_id" required>${targetOptions}</select></label>
       <label class="wide">Referenzwert<input name="reference_value" value="${esc(routing.value || "")}" required></label>
       <label class="wide">Begründung<textarea name="reason" required></textarea></label>
       <button class="button primary" type="submit">Review speichern</button>
@@ -163,7 +174,8 @@ async function submitReview(event) {
   const form = new FormData(event.currentTarget);
   const body = {
     reviewer: form.get("reviewer"), reason: form.get("reason"), document_type: form.get("document_type"),
-    routing_reference: { namespace: form.get("namespace"), type: form.get("reference_type"), value: form.get("reference_value") }
+    routing_reference: { namespace: form.get("namespace"), type: form.get("reference_type"), value: form.get("reference_value") },
+    target_system_id: form.get("target_system_id")
   };
   try {
     const job = await api(`/v1/jobs/${event.currentTarget.dataset.id}/review`, { method: "PATCH", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body) });
@@ -191,15 +203,159 @@ async function refreshAll(includeStats = true) {
   catch (error) { toast(error.message, true); }
 }
 
+function switchView(view) {
+  $("#documents-view").classList.toggle("hidden", view !== "documents");
+  $("#channels-view").classList.toggle("hidden", view !== "channels");
+  $("#targets-view").classList.toggle("hidden", view !== "targets");
+  document.querySelectorAll(".nav-button").forEach(button => button.classList.toggle("active", button.dataset.view === view));
+  if (view === "channels") loadChannels();
+  if (view === "targets") loadTargets();
+}
+
+async function loadTargets() {
+  try {
+    state.targets = await api("/v1/target-systems");
+    const list = $("#target-list");
+    list.innerHTML = state.targets.map(target => `
+      <article class="channel-card">
+        <div>
+          <div class="job-title">
+            <span class="badge ${target.enabled ? "delivered" : "received"}">${target.enabled ? "Aktiv" : "Pausiert"}</span>
+            ${target.is_default ? '<span class="badge processing">Standard</span>' : ""}
+            <h3>${esc(target.name)}</h3>
+          </div>
+          <span class="channel-path">${target.kind === "http" ? esc(target.endpoint_url) : "data/output"}</span>
+          <div class="channel-details">
+            <span>Typ <strong>${esc(target.kind)}</strong></span>
+            <span>Timeout <strong>${target.timeout_seconds}s</strong></span>
+            <span>Letzte Zustellung <strong>${formatTime(target.last_delivery_at)}</strong></span>
+            <span>Token <strong>${target.has_bearer_token ? "hinterlegt" : "—"}</strong></span>
+          </div>
+          ${target.last_error ? `<div class="channel-error">${esc(target.last_error)}</div>` : ""}
+        </div>
+        <div class="channel-actions">
+          ${!target.is_default ? `<button class="button target-default" data-id="${target.id}" type="button">Als Standard</button>` : ""}
+          <button class="button target-toggle" data-id="${target.id}" data-enabled="${target.enabled}" type="button" ${target.is_default ? "disabled" : ""}>${target.enabled ? "Pausieren" : "Aktivieren"}</button>
+          ${!target.is_default ? `<button class="button danger target-delete" data-id="${target.id}" type="button">Löschen</button>` : ""}
+        </div>
+      </article>`).join("");
+    document.querySelectorAll(".target-default").forEach(button => button.addEventListener("click", () => updateTarget(button.dataset.id, {enabled: true, is_default: true}, "Standardziel geändert")));
+    document.querySelectorAll(".target-toggle").forEach(button => button.addEventListener("click", () => updateTarget(button.dataset.id, {enabled: button.dataset.enabled !== "true"}, "Zielsystem aktualisiert")));
+    document.querySelectorAll(".target-delete").forEach(button => button.addEventListener("click", () => deleteTarget(button.dataset.id)));
+  } catch (error) { toast(error.message, true); }
+}
+
+async function updateTarget(id, body, message) {
+  try {
+    await api(`/v1/target-systems/${id}`, {method: "PATCH", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body)});
+    toast(message); await loadTargets();
+  } catch (error) { toast(error.message, true); }
+}
+
+async function deleteTarget(id) {
+  if (!window.confirm("Zielsystem löschen? Bereits verarbeitete Jobs bleiben erhalten.")) return;
+  try { await api(`/v1/target-systems/${id}`, {method: "DELETE"}); toast("Zielsystem gelöscht"); await loadTargets(); }
+  catch (error) { toast(error.message, true); }
+}
+
+async function createTarget(event) {
+  event.preventDefault();
+  const form = new FormData(event.currentTarget);
+  const kind = form.get("kind");
+  const body = {
+    name: form.get("name"), kind,
+    endpoint_url: kind === "http" ? form.get("endpoint_url") : null,
+    bearer_token: form.get("bearer_token") || null,
+    timeout_seconds: Number(form.get("timeout_seconds")),
+    enabled: form.get("enabled") === "on", is_default: form.get("is_default") === "on"
+  };
+  try {
+    await api("/v1/target-systems", {method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body)});
+    event.currentTarget.reset(); event.currentTarget.elements.enabled.checked = true; event.currentTarget.elements.timeout_seconds.value = 30;
+    toast("Zielsystem angelegt"); await loadTargets();
+  } catch (error) { toast(error.message, true); }
+}
+
+async function loadChannels() {
+  try {
+    const channels = await api("/v1/input-channels");
+    const list = $("#channel-list");
+    if (!channels.length) {
+      list.innerHTML = '<div class="empty-list"><strong>Noch keine Eingangskanäle</strong><br><span>Lege rechts den ersten Hotfolder an.</span></div>';
+      return;
+    }
+    list.innerHTML = channels.map(channel => `
+      <article class="channel-card">
+        <div>
+          <div class="job-title"><span class="badge ${channel.enabled ? "delivered" : "received"}">${channel.enabled ? "Aktiv" : "Pausiert"}</span><h3>${esc(channel.name)}</h3></div>
+          <span class="channel-path">data/${esc(channel.directory)}</span>
+          <div class="channel-details">
+            <span>Muster <strong>${esc(channel.patterns.join(", "))}</strong></span>
+            <span>Letzter Eingang <strong>${formatTime(channel.last_ingested_at)}</strong></span>
+          </div>
+          ${channel.last_error ? `<div class="channel-error">${esc(channel.last_error)}</div>` : ""}
+        </div>
+        <div class="channel-actions">
+          <button class="button channel-toggle" data-id="${channel.id}" data-enabled="${channel.enabled}" type="button">${channel.enabled ? "Pausieren" : "Aktivieren"}</button>
+          <button class="button danger channel-delete" data-id="${channel.id}" data-name="${esc(channel.name)}" type="button">Löschen</button>
+        </div>
+      </article>`).join("");
+    document.querySelectorAll(".channel-toggle").forEach(button => button.addEventListener("click", () => toggleChannel(button.dataset.id, button.dataset.enabled !== "true")));
+    document.querySelectorAll(".channel-delete").forEach(button => button.addEventListener("click", () => deleteChannel(button.dataset.id, button.dataset.name)));
+  } catch (error) { toast(error.message, true); }
+}
+
+async function toggleChannel(id, enabled) {
+  try {
+    await api(`/v1/input-channels/${id}`, { method: "PATCH", headers: {"Content-Type":"application/json"}, body: JSON.stringify({enabled}) });
+    toast(enabled ? "Kanal aktiviert" : "Kanal pausiert"); loadChannels();
+  } catch (error) { toast(error.message, true); }
+}
+
+async function deleteChannel(id, name) {
+  if (!window.confirm(`Eingangskanal „${name}“ löschen? Vorhandene Dateien und Jobs bleiben erhalten.`)) return;
+  try {
+    await api(`/v1/input-channels/${id}`, { method: "DELETE" });
+    toast("Kanal gelöscht"); loadChannels();
+  } catch (error) { toast(error.message, true); }
+}
+
+async function createChannel(event) {
+  event.preventDefault();
+  const form = new FormData(event.currentTarget);
+  const body = {
+    name: form.get("name"), directory: form.get("directory"),
+    patterns: String(form.get("patterns")).split(",").map(value => value.trim()).filter(Boolean),
+    enabled: form.get("enabled") === "on"
+  };
+  try {
+    await api("/v1/input-channels", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body) });
+    event.currentTarget.reset(); event.currentTarget.elements.enabled.checked = true;
+    event.currentTarget.elements.patterns.value = "*.pdf, *.txt";
+    toast("Eingangskanal angelegt"); loadChannels();
+  } catch (error) { toast(error.message, true); }
+}
+
 $("#file-upload").addEventListener("change", event => { if (event.target.files[0]) uploadFile(event.target.files[0]); event.target.value = ""; });
 $("#refresh").addEventListener("click", () => refreshAll());
 $("#status-filter").addEventListener("change", event => { state.status = event.target.value; state.offset = 0; refreshAll(); });
 $("#search").addEventListener("input", event => { window.clearTimeout(state.searchTimer); state.searchTimer = window.setTimeout(() => { state.query = event.target.value.trim(); state.offset = 0; loadJobs(); }, 250); });
 $("#previous").addEventListener("click", () => { state.offset = Math.max(0, state.offset - state.limit); loadJobs(); });
 $("#next").addEventListener("click", () => { state.offset += state.limit; loadJobs(); });
+document.querySelectorAll(".nav-button").forEach(button => button.addEventListener("click", () => switchView(button.dataset.view)));
+$("#channel-form").addEventListener("submit", createChannel);
+$("#reload-channels").addEventListener("click", loadChannels);
+$("#target-form").addEventListener("submit", createTarget);
+$("#reload-targets").addEventListener("click", loadTargets);
 
+loadTargets();
 refreshAll();
 window.setInterval(async () => {
   await refreshAll();
-  if (state.selectedId) { try { renderDetail(await api(`/v1/jobs/${state.selectedId}`)); } catch (_) { /* transient */ } }
+  if (state.selectedId) {
+    try {
+      const job = await api(`/v1/jobs/${state.selectedId}`);
+      if (!state.reviewDirty && job.updated_at !== state.selectedUpdatedAt) renderDetail(job);
+    } catch (_) { /* transient */ }
+  }
 }, 4000);

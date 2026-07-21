@@ -13,6 +13,8 @@ Ziel: synthetisches Textdokument Ende-zu-Ende vom Eingang zum Dateisystem-Connec
 - Worker/Queue, Lease-Recovery und Retry (umgesetzt)
 - Worker-Metriken, kontrolliertes Shutdown und administrativer Retry
 - Operator-Konsole für Übersicht, Vorschau, Review, Freigabe und Retry (MVP umgesetzt)
+- persistente Verwaltung mehrerer Hotfolder-Eingänge (MVP umgesetzt)
+- Zielsystemprofile und generischer HTTP-Connector mit Mock-Empfänger (MVP umgesetzt)
 - Authentisierung, Rollenmodell und produktionsfähiger Audit-Trail
 - Authentisierung, Audit-Events, Upload-Limits und Malware-Prüfung
 - Review-API/-UI für Quarantäne

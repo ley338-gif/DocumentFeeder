@@ -2,7 +2,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
 
-from document_core.models import DocumentJob, JobStatus
+from document_core.models import DocumentJob, InputChannel, JobStatus
 from document_core.store import JobStore
 
 
@@ -93,3 +93,21 @@ def test_only_failed_job_can_be_requeued():
     assert retried.attempt_count == 0
     assert retried.last_error is None
     assert store.retry_failed(job.id) is None
+
+
+def test_input_channel_round_trip_and_enabled_filter():
+    store = JobStore("sqlite://")
+    active = InputChannel(name="Scanner", directory="scanner", patterns=["*.pdf"])
+    paused = InputChannel(name="Import", directory="import", enabled=False)
+
+    store.save_channel(active)
+    store.save_channel(paused)
+
+    loaded = store.get_channel(active.id)
+    assert loaded is not None
+    assert loaded.name == active.name
+    assert loaded.directory == active.directory
+    assert loaded.patterns == active.patterns
+    assert [channel.id for channel in store.list_channels(enabled_only=True)] == [active.id]
+    assert store.delete_channel(paused.id) is True
+    assert store.get_channel(paused.id) is None

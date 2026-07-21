@@ -197,3 +197,94 @@ def test_failed_job_can_be_requeued_from_api(tmp_path: Path, monkeypatch):
     assert retried["status"] == JobStatus.RECEIVED
     assert retried["attempt_count"] == 0
     assert retried["last_error"] is None
+
+
+def test_input_channels_can_be_managed_through_api(tmp_path: Path, monkeypatch):
+    configure_api(tmp_path, monkeypatch)
+
+    with TestClient(api_module.app) as client:
+        initial = client.get("/v1/input-channels")
+        created = client.post(
+            "/v1/input-channels",
+            json={
+                "name": "Scanner",
+                "directory": "scanner/incoming",
+                "patterns": ["*.pdf", "scan-*.tif"],
+                "enabled": True,
+            },
+        )
+        channel = created.json()
+        paused = client.patch(
+            f"/v1/input-channels/{channel['id']}", json={"enabled": False}
+        )
+        duplicate = client.post(
+            "/v1/input-channels",
+            json={"name": "Scanner", "directory": "another", "patterns": ["*"]},
+        )
+        deleted = client.delete(f"/v1/input-channels/{channel['id']}")
+
+    assert initial.status_code == 200
+    assert initial.json()[0]["directory"] == "hotfolder"
+    assert created.status_code == 201
+    assert (tmp_path / "scanner" / "incoming").is_dir()
+    assert paused.json()["enabled"] is False
+    assert duplicate.status_code == 409
+    assert deleted.status_code == 204
+
+
+def test_input_channel_rejects_paths_outside_data_directory(tmp_path: Path, monkeypatch):
+    configure_api(tmp_path, monkeypatch)
+
+    with TestClient(api_module.app) as client:
+        traversal = client.post(
+            "/v1/input-channels",
+            json={"name": "Unsafe", "directory": "../outside", "patterns": ["*"]},
+        )
+        nested_pattern = client.post(
+            "/v1/input-channels",
+            json={"name": "Unsafe pattern", "directory": "safe", "patterns": ["*/x.pdf"]},
+        )
+
+    assert traversal.status_code == 422
+    assert nested_pattern.status_code == 422
+
+
+def test_target_systems_can_be_managed_without_exposing_tokens(tmp_path: Path, monkeypatch):
+    configure_api(tmp_path, monkeypatch)
+
+    with TestClient(api_module.app) as client:
+        initial = client.get("/v1/target-systems")
+        created = client.post(
+            "/v1/target-systems",
+            json={
+                "name": "Sandbox API",
+                "kind": "http",
+                "endpoint_url": "http://mock-target:8090/documents",
+                "bearer_token": "top-secret",
+                "timeout_seconds": 10,
+                "enabled": True,
+                "is_default": True,
+            },
+        )
+        target = created.json()
+        listing = client.get("/v1/target-systems")
+        delete_default = client.delete(f"/v1/target-systems/{target['id']}")
+
+    assert initial.json()[0]["kind"] == "filesystem"
+    assert created.status_code == 201
+    assert target["has_bearer_token"] is True
+    assert "bearer_token" not in target
+    assert all("bearer_token" not in item for item in listing.json())
+    assert delete_default.status_code == 409
+
+
+def test_http_target_requires_valid_endpoint(tmp_path: Path, monkeypatch):
+    configure_api(tmp_path, monkeypatch)
+
+    with TestClient(api_module.app) as client:
+        response = client.post(
+            "/v1/target-systems",
+            json={"name": "Broken", "kind": "http", "endpoint_url": "not-a-url"},
+        )
+
+    assert response.status_code == 422

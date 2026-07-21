@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
@@ -6,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from .models import DocumentJob, JobStatus
+from .models import DocumentJob, InputChannel, JobStatus, TargetSystem
 
 
 class JobRepository(Protocol):
@@ -46,6 +48,7 @@ class JobRow(Base):
     sha256: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
     document_type: Mapped[str] = mapped_column(String(100), nullable=False)
     routing_reference: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    target_system_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     metadata_json: Mapped[dict] = mapped_column("metadata", JSON, nullable=False)
     review_history: Mapped[list] = mapped_column(JSON, nullable=False)
     text_preview: Mapped[str] = mapped_column(Text, nullable=False)
@@ -54,6 +57,38 @@ class JobRow(Base):
     next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     worker_id: Mapped[str | None] = mapped_column(String(200))
+    last_error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class InputChannelRow(Base):
+    __tablename__ = "input_channels"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    directory: Mapped[str] = mapped_column(String(300), nullable=False, unique=True)
+    patterns: Mapped[list] = mapped_column(JSON, nullable=False)
+    enabled: Mapped[bool] = mapped_column(nullable=False)
+    last_ingested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class TargetSystemRow(Base):
+    __tablename__ = "target_systems"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    endpoint_url: Mapped[str | None] = mapped_column(Text)
+    bearer_token: Mapped[str | None] = mapped_column(Text)
+    timeout_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
+    enabled: Mapped[bool] = mapped_column(nullable=False)
+    is_default: Mapped[bool] = mapped_column(nullable=False, index=True)
+    last_delivery_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_error: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -86,6 +121,7 @@ class JobStore:
             "routing_reference": (
                 job.routing_reference.model_dump(mode="json") if job.routing_reference else None
             ),
+            "target_system_id": job.target_system_id,
             "metadata_json": job.metadata,
             "review_history": [event.model_dump(mode="json") for event in job.review_history],
             "text_preview": job.text_preview,
@@ -111,6 +147,7 @@ class JobStore:
                 "sha256": row.sha256,
                 "document_type": row.document_type,
                 "routing_reference": row.routing_reference,
+                "target_system_id": row.target_system_id,
                 "metadata": row.metadata_json,
                 "review_history": row.review_history,
                 "text_preview": row.text_preview,
@@ -248,3 +285,120 @@ class JobStore:
             return True
         except Exception:
             return False
+
+    @staticmethod
+    def _channel_model(row: InputChannelRow) -> InputChannel:
+        return InputChannel.model_validate(
+            {
+                "id": row.id,
+                "name": row.name,
+                "kind": row.kind,
+                "directory": row.directory,
+                "patterns": row.patterns,
+                "enabled": row.enabled,
+                "last_ingested_at": row.last_ingested_at,
+                "last_error": row.last_error,
+                "created_at": row.created_at,
+                "updated_at": row.updated_at,
+            }
+        )
+
+    def list_channels(self, enabled_only: bool = False) -> list[InputChannel]:
+        with self.sessions() as session:
+            statement = select(InputChannelRow).order_by(InputChannelRow.name)
+            if enabled_only:
+                statement = statement.where(InputChannelRow.enabled.is_(True))
+            return [self._channel_model(row) for row in session.scalars(statement).all()]
+
+    def get_channel(self, channel_id: str) -> InputChannel | None:
+        with self.sessions() as session:
+            row = session.get(InputChannelRow, channel_id)
+            return self._channel_model(row) if row else None
+
+    def save_channel(self, channel: InputChannel) -> InputChannel:
+        channel.updated_at = datetime.now(UTC)
+        values = channel.model_dump()
+        with self.sessions.begin() as session:
+            row = session.get(InputChannelRow, channel.id)
+            if row is None:
+                session.add(InputChannelRow(**values))
+            else:
+                for key, value in values.items():
+                    setattr(row, key, value)
+        return channel
+
+    def delete_channel(self, channel_id: str) -> bool:
+        with self.sessions.begin() as session:
+            row = session.get(InputChannelRow, channel_id)
+            if row is None:
+                return False
+            session.delete(row)
+            return True
+
+    def ensure_default_channel(self) -> InputChannel:
+        with self.sessions() as session:
+            row = session.scalar(
+                select(InputChannelRow).where(InputChannelRow.directory == "hotfolder")
+            )
+            if row:
+                return self._channel_model(row)
+        return self.save_channel(InputChannel(name="Standard-Hotfolder", directory="hotfolder"))
+
+    @staticmethod
+    def _target_model(row: TargetSystemRow) -> TargetSystem:
+        return TargetSystem.model_validate({column.name: getattr(row, column.name) for column in row.__table__.columns})
+
+    def list_target_systems(self, enabled_only: bool = False) -> list[TargetSystem]:
+        with self.sessions() as session:
+            statement = select(TargetSystemRow).order_by(TargetSystemRow.name)
+            if enabled_only:
+                statement = statement.where(TargetSystemRow.enabled.is_(True))
+            return [self._target_model(row) for row in session.scalars(statement).all()]
+
+    def get_target_system(self, target_id: str) -> TargetSystem | None:
+        with self.sessions() as session:
+            row = session.get(TargetSystemRow, target_id)
+            return self._target_model(row) if row else None
+
+    def get_default_target_system(self) -> TargetSystem | None:
+        with self.sessions() as session:
+            row = session.scalar(
+                select(TargetSystemRow).where(
+                    TargetSystemRow.is_default.is_(True), TargetSystemRow.enabled.is_(True)
+                )
+            )
+            return self._target_model(row) if row else None
+
+    def save_target_system(self, target: TargetSystem) -> TargetSystem:
+        target.updated_at = datetime.now(UTC)
+        values = target.model_dump()
+        with self.sessions.begin() as session:
+            if target.is_default:
+                session.execute(
+                    update(TargetSystemRow)
+                    .where(TargetSystemRow.id != target.id)
+                    .values(is_default=False, updated_at=target.updated_at)
+                )
+            row = session.get(TargetSystemRow, target.id)
+            if row is None:
+                session.add(TargetSystemRow(**values))
+            else:
+                for key, value in values.items():
+                    setattr(row, key, value)
+        return target
+
+    def delete_target_system(self, target_id: str) -> bool:
+        with self.sessions.begin() as session:
+            row = session.get(TargetSystemRow, target_id)
+            if row is None or row.is_default:
+                return False
+            session.delete(row)
+            return True
+
+    def ensure_default_target_system(self) -> TargetSystem:
+        existing = self.get_default_target_system()
+        if existing:
+            return existing
+        return self.save_target_system(
+            TargetSystem(name="Dateisystem", kind="filesystem", enabled=True, is_default=True)
+        )

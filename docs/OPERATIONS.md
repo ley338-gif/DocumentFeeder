@@ -4,10 +4,11 @@
 
 | Pfad | Zweck |
 |---|---|
-| `data/hotfolder` | eingehende Dateien |
+| `data/hotfolder` | Standard-Hotfolder; weitere Unterordner sind konfigurierbar |
 | `data/inbox` | unveränderte Arbeitskopien |
 | `data/output` | Dateisystem-Zielconnector |
 | `data/quarantine` | fachlich unklare Dokumente |
+| `data/mock-target` | Zustellungen des lokalen Mock-Zielsystems |
 
 ## Konfiguration
 
@@ -35,6 +36,32 @@ docker compose restart worker
 Ein Worker-Neustart verliert keine Jobs. Ein `processing`-Job kann nach Ablauf seiner Lease
 erneut beansprucht werden. Connectoren müssen trotzdem den dokumentierten Idempotenzschlüssel
 verwenden, da ein externer Aufruf und ein Datenbankcommit keine gemeinsame Transaktion bilden.
+
+## Hotfolder verwalten
+
+Hotfolder werden persistent in der Datenbank gespeichert und in der Operator-Konsole unter
+**Eingangskanäle** verwaltet. Alternativ steht die API `/v1/input-channels` zur Verfügung.
+`directory` ist immer relativ zu `DOCUMENT_CORE_DATA_DIR`; absolute Pfade und `..` sind
+unzulässig. Der Dienst legt den konfigurierten Unterordner beim Speichern automatisch an.
+
+Jeder aktive Kanal wird im durch `DOCUMENT_CORE_HOTFOLDER_INTERVAL` bestimmten Intervall
+geprüft. Nur Dateien, die mindestens einem `patterns`-Eintrag entsprechen, werden übernommen.
+Nach erfolgreicher Aufnahme wird die Quelldatei entfernt; die unveränderte Arbeitskopie liegt
+anschließend unter `data/inbox`. `last_ingested_at` und `last_error` zeigen den Kanalzustand.
+Deaktivieren oder Löschen eines Kanals verändert vorhandene Dateien im Hotfolder nicht.
+
+## Zielsysteme verwalten
+
+Zielsystemprofile werden unter **Zielsysteme** oder über `/v1/target-systems` verwaltet.
+Beim ersten Start entsteht automatisch das Dateisystem-Standardziel. Ein neues HTTP-Ziel für
+den Compose-Mock verwendet `http://mock-target:8090/documents`. Neue Jobs speichern die ID
+des zu diesem Zeitpunkt aktiven Standardziels; ein späterer Standardwechsel verändert bereits
+eingegangene Jobs nicht.
+
+HTTP-Fehler werden wie andere technische Verarbeitungsfehler über die Worker-Queue erneut
+versucht. `last_delivery_at` und `last_error` zeigen den letzten Zielzustand. Tokens liegen im
+MVP verschlüsselt **nicht** vor, sondern lediglich zugriffsgeschützt in der Datenbank. Für
+Produktion ist deshalb Secret-Manager- oder Envelope-Encryption-Anbindung verpflichtend.
 
 ## Datenbank und Migrationen
 

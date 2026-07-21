@@ -164,6 +164,7 @@ def test_frontend_job_api_supports_stats_pagination_and_content(tmp_path: Path, 
         listing = client.get("/v1/jobs", params={"status": "received", "limit": 1})
         stats = client.get("/v1/jobs/stats")
         content = client.get(f"/v1/jobs/{uploaded['id']}/content")
+        events = client.get(f"/v1/jobs/{uploaded['id']}/events")
         download = client.get(
             f"/v1/jobs/{uploaded['id']}/content", params={"download": "true"}
         )
@@ -175,6 +176,8 @@ def test_frontend_job_api_supports_stats_pagination_and_content(tmp_path: Path, 
     assert listing.json()["items"][0]["id"] == uploaded["id"]
     assert stats.json()["by_status"]["received"] == 1
     assert content.content == source
+    assert events.status_code == 200
+    assert events.json()[0]["event_type"] == "ingested"
     assert content.headers["content-disposition"].startswith("inline")
     assert download.headers["content-disposition"].startswith("attachment")
 
@@ -197,6 +200,7 @@ def test_failed_job_can_be_requeued_from_api(tmp_path: Path, monkeypatch):
     assert retried["status"] == JobStatus.RECEIVED
     assert retried["attempt_count"] == 0
     assert retried["last_error"] is None
+    assert api_module.store.list_events(uploaded["id"])[-1].event_type == "manual_retry"
 
 
 def test_input_channels_can_be_managed_through_api(tmp_path: Path, monkeypatch):

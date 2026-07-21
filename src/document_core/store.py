@@ -3,12 +3,12 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
-from sqlalchemy import JSON, DateTime, Integer, String, Text, and_, create_engine, or_, select, update
+from sqlalchemy import JSON, DateTime, Integer, String, Text, and_, create_engine, delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from .models import DeliveryRule, DocumentJob, InputChannel, JobStatus, TargetSystem
+from .models import DeliveryRule, DocumentJob, InputChannel, JobEvent, JobStatus, TargetSystem
 
 
 class JobRepository(Protocol):
@@ -31,6 +31,10 @@ class JobRepository(Protocol):
     def retry_failed(self, job_id: str) -> DocumentJob | None: ...
 
     def delete_stalled_job(self, job_id: str) -> DocumentJob | None: ...
+
+    def save_event(self, event: JobEvent) -> JobEvent: ...
+
+    def list_events(self, job_id: str) -> list[JobEvent]: ...
 
     def healthcheck(self) -> bool: ...
 
@@ -111,6 +115,25 @@ class DeliveryRuleRow(Base):
     priority: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class JobEventRow(Base):
+    __tablename__ = "job_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    job_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    event_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    message: Mapped[str] = mapped_column(String(500), nullable=False)
+    attempt: Mapped[int | None] = mapped_column(Integer)
+    target_system_id: Mapped[str | None] = mapped_column(String(36), index=True)
+    target_name: Mapped[str | None] = mapped_column(String(100))
+    delivery_rule: Mapped[str | None] = mapped_column(String(100))
+    external_reference: Mapped[str | None] = mapped_column(Text)
+    error: Mapped[str | None] = mapped_column(Text)
+    details: Mapped[dict] = mapped_column(JSON, nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class JobStore:
@@ -314,8 +337,48 @@ class JobStore:
             if row.status not in deletable_statuses:
                 return None
             job = self._model(row)
+            session.execute(delete(JobEventRow).where(JobEventRow.job_id == job_id))
             session.delete(row)
             return job
+
+    @staticmethod
+    def _event_model(row: JobEventRow) -> JobEvent:
+        return JobEvent.model_validate(
+            {
+                "id": row.id,
+                "job_id": row.job_id,
+                "event_type": row.event_type,
+                "status": row.status,
+                "message": row.message,
+                "attempt": row.attempt,
+                "target_system_id": row.target_system_id,
+                "target_name": row.target_name,
+                "delivery_rule": row.delivery_rule,
+                "external_reference": row.external_reference,
+                "error": row.error,
+                "details": row.details,
+                "started_at": row.started_at,
+                "completed_at": row.completed_at,
+            }
+        )
+
+    def save_event(self, event: JobEvent) -> JobEvent:
+        with self.sessions.begin() as session:
+            session.add(JobEventRow(**event.model_dump()))
+        return event
+
+    def list_events(self, job_id: str) -> list[JobEvent]:
+        with self.sessions() as session:
+            rows = session.scalars(
+                select(JobEventRow)
+                .where(JobEventRow.job_id == job_id)
+                .order_by(
+                    func.coalesce(JobEventRow.completed_at, JobEventRow.started_at),
+                    JobEventRow.started_at,
+                    JobEventRow.id,
+                )
+            ).all()
+            return [self._event_model(row) for row in rows]
 
     def healthcheck(self) -> bool:
         try:

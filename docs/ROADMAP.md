@@ -16,9 +16,10 @@ Ziel: synthetisches Textdokument Ende-zu-Ende vom Eingang zum Dateisystem-Connec
 - persistente Verwaltung mehrerer Hotfolder-Eingänge (MVP umgesetzt)
 - Zielsystemprofile und generischer HTTP-Connector mit Mock-Empfänger (MVP umgesetzt)
 - workfloworientierte Operator-Konsole und regelbasierte Dateiablage (MVP umgesetzt)
+- persistentes Job- und Zustellprotokoll mit UI-Timeline (MVP umgesetzt)
+- Review-API/-UI für Quarantäne (MVP umgesetzt)
 - Authentisierung, Rollenmodell und produktionsfähiger Audit-Trail
-- Authentisierung, Audit-Events, Upload-Limits und Malware-Prüfung
-- Review-API/-UI für Quarantäne
+- Upload-Limits und Malware-Prüfung
 - Observability und Betriebsmetriken
 
 ## M3 – KI-Dokumenttyp-Vorschläge (v0.3)

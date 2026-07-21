@@ -22,10 +22,36 @@ def test_text_document_reaches_filesystem_connector(tmp_path: Path):
     assert job.status == JobStatus.DELIVERED
     assert Path(job.metadata["destination_reference"]).exists()
     assert (settings.output_dir / "report" / job.id / "metadata.json").exists()
+    events = pipeline.store.list_events(job.id)
+    assert [event.event_type for event in events] == [
+        "ingested",
+        "processing_started",
+        "delivery_started",
+        "delivery_succeeded",
+    ]
+    delivered = events[-1]
+    assert delivered.external_reference == job.metadata["destination_reference"]
+    assert delivered.completed_at is not None
 
     duplicate = pipeline.ingest(source, "test")
     assert duplicate.id == job.id
     assert len(pipeline.store.list()) == 1
+
+
+def test_extracted_null_bytes_are_removed_before_persistence(tmp_path: Path):
+    settings = Settings(data_dir=tmp_path)
+    settings.create_directories()
+    source = tmp_path / "nul.txt"
+    source.write_bytes(b"Bericht\x00\nBetreff: Nullzeichen")
+    pipeline = DocumentPipeline(
+        settings, JobStore("sqlite://"), FilesystemConnector(settings.output_dir)
+    )
+
+    pipeline.ingest(source, "test")
+    job = pipeline.process(pipeline.store.claim_next("worker", 60))
+
+    assert job.status == JobStatus.DELIVERED
+    assert "\x00" not in job.text_preview
 
 
 def test_document_reaches_configured_http_target(tmp_path: Path, monkeypatch):
@@ -75,6 +101,10 @@ def test_document_reaches_configured_http_target(tmp_path: Path, monkeypatch):
     assert captured["payload"]["document_type"] == "report"
     assert captured["authorization"] == "Bearer secret"
     assert store.get_target_system(target.id).last_delivery_at is not None
+    delivery = store.list_events(job.id)[-1]
+    assert delivery.event_type == "delivery_succeeded"
+    assert delivery.target_name == "HTTP Sandbox"
+    assert delivery.external_reference == "remote:42"
 
 
 def test_delivery_rule_routes_invoice_to_configured_folder(tmp_path: Path):

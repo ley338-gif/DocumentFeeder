@@ -19,6 +19,7 @@ Die Hauptnavigation folgt dem Arbeitsablauf:
 - paginierte Jobliste
 - Upload mit unmittelbarer Queue-Rückmeldung
 - Detailansicht mit Queue-, Retry- und Metadateninformationen
+- persistente Aktivitäts- und Zustell-Timeline mit Ziel, Dauer, Quittung und Fehlern
 - Inline-Vorschau und Download des Originaldokuments
 - Review mit Dokumenttyp und strukturierter Routing-Referenz
 - Freigabe quarantänisierter Dokumente
@@ -67,6 +68,10 @@ liefert `{items, total, limit, offset}`. `GET /v1/jobs/stats` liefert Zähler je
 `GET /v1/jobs/{id}/content` liefert den Inhalt inline. Mit `download=true` wird eine
 Download-Disposition gesetzt. Der Server prüft, dass der gespeicherte Pfad innerhalb des
 konfigurierten Inbox-Verzeichnisses liegt.
+
+`GET /v1/jobs/{id}/events` liefert die chronologische Event-Historie. Die Detailansicht
+lädt sie unabhängig vom Dokument und rendert neueste Ereignisse zuerst, ohne Formularfelder
+der manuellen Prüfung zu überschreiben.
 
 `POST /v1/jobs/{id}/retry` ist nur für `failed` erlaubt. Der Vorgang setzt Versuche und
 technischen Fehlerzustand zurück und plant den Job erneut als `received` ein.

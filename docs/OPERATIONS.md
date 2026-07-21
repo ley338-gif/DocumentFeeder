@@ -84,6 +84,17 @@ versucht. `last_delivery_at` und `last_error` zeigen den letzten Zielzustand. To
 MVP verschlüsselt **nicht** vor, sondern lediglich zugriffsgeschützt in der Datenbank. Für
 Produktion ist deshalb Secret-Manager- oder Envelope-Encryption-Anbindung verpflichtend.
 
+## Aktivitäts- und Zustellprotokoll
+
+`GET /v1/jobs/{job_id}/events` liefert die persistente Timeline eines Jobs. Sie umfasst
+Eingang, Verarbeitungsbeginn, Quarantäne, Review, Retry sowie Beginn, Erfolg oder Fehler einer
+Zustellung. Zustellereignisse nennen Zielsystem, Regel, Versuch, Zeitpunkte, Zielreferenz und
+Fehlertext. Die Operator-Konsole zeigt dieselben Informationen in der Dokumentdetailansicht.
+
+Beim administrativen Löschen eines noch nicht zugestellten Jobs werden auch dessen Events
+gelöscht. Für produktive Compliance-Anforderungen muss vorab entschieden werden, ob Events
+stattdessen getrennt und manipulationsgeschützt aufbewahrt werden müssen.
+
 ## Datenbank und Migrationen
 
 ```bash
@@ -137,3 +148,5 @@ brauchbaren Text werden mit PDFium bei 2,5-facher Auflösung gerendert und mit T
 (`DOCUMENT_CORE_TESSERACT_LANG`) verarbeitet. Die Job-Metadaten nennen Methode, Seitenzahl
 und OCR-Seiten. Beschädigte oder leere PDFs erhalten den Status `failed`; lesbare, aber
 fachlich unbekannte Dokumente werden quarantänisiert.
+Von PDF-Generatoren eingebettete Nullzeichen werden vor Klassifikation und Datenbankablage
+entfernt, da PostgreSQL diese Zeichen in Textfeldern nicht unterstützt.

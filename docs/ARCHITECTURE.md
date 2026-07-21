@@ -49,6 +49,11 @@ endet ein technischer Fehler in `failed`.
 
 Jeder Job besitzt ID, Hash, Quelle, Originalname, Status, Metadaten, Fehler und Zeitstempel. Review-Entscheidungen werden mit Bearbeiter, Begründung und Änderungen protokolliert. Für Produktion sind Rollen/Rechte, Verschlüsselung, Aufbewahrung und Löschkonzepte vor Verarbeitung echter Fachdaten verpflichtend.
 
+Zusätzlich wird jeder relevante Verarbeitungsschritt unveränderlich in `job_events`
+protokolliert. Zustellereignisse enthalten Zielsystem, Ablageregel, Versuch, Start/Ende,
+externe Quittung und Fehler. Die Event-Historie ergänzt den aktuellen Jobzustand und macht
+Retries nachvollziehbar; sie ersetzt noch keinen manipulationsgeschützten Compliance-Audit.
+
 Hotfolder-Eingänge sind als `InputChannel` in der SQL-Datenbank gespeichert. Der API-Prozess
 liest aktive Kanäle zyklisch, beschränkt ihre Verzeichnisse auf das gemeinsame Datenverzeichnis
 und reicht passende Dateien an dieselbe Ingestion-Pipeline wie der HTTP-Upload weiter.

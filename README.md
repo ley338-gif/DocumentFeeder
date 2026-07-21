@@ -17,6 +17,7 @@ Document Core ist eine erweiterbare, domänenneutrale Dokumenten-Pipeline: Dokum
 - generisches Connector-Interface, Dateisystem- und HTTP-Connector
 - persistente Zielsystemprofile mit Standardziel, Timeout und optionalem Bearer-Token
 - dokumenttypabhängige Ablageregeln und sichere Dateisystem-Pfadvorlagen
+- persistentes Aktivitäts- und Zustellprotokoll mit Ziel, Versuch, Dauer und technischer Quittung
 - automatisierte Tests und Docker Compose
 
 KI wird erst hinter stabilen Interfaces ergänzt. Siehe [Roadmap](docs/ROADMAP.md).
@@ -34,6 +35,9 @@ Die Operator-Konsole ist anschließend unter `http://localhost:8000/` erreichbar
 Upload, Statusübersicht, Suche, Dokumentvorschau, Review, Freigabe, administrativen Retry
 und einen workfloworientierten Arbeitsbereich für Übersicht, Prüfung, Dokumente,
 Automatisierung und Einstellungen.
+Die Dokumentdetailansicht zeigt zusätzlich eine chronologische Timeline aller relevanten
+Verarbeitungs-, Review-, Retry- und Zustellereignisse. Zustellungen enthalten das verwendete
+Zielsystem, die Ablageregel, den Versuch, die Dauer, die externe Referenz und mögliche Fehler.
 
 Beim ersten Start wird `./data/hotfolder` als Standardkanal angelegt. Weitere Hotfolder
 lassen sich in der Operator-Konsole unter **Eingangskanäle** konfigurieren. Alle Pfade sind
@@ -82,6 +86,7 @@ Referenz: R-12345
 - `GET /v1/jobs` – Jobs auflisten
 - `GET /v1/jobs/stats` – Statuszahlen für das Dashboard
 - `GET /v1/jobs/{job_id}` – Status und extrahierte Metadaten
+- `GET /v1/jobs/{job_id}/events` – persistentes Aktivitäts- und Zustellprotokoll
 - `GET /v1/jobs/{job_id}/content` – Dokumentvorschau oder Download
 - `PATCH /v1/jobs/{job_id}/review` – quarantänisierten Job korrigieren
 - `POST /v1/jobs/{job_id}/release` – geprüften Job freigeben

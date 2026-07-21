@@ -38,6 +38,23 @@ class ReviewRequest(BaseModel):
     target_system_id: str | None = None
 
 
+class JobEvent(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    job_id: str
+    event_type: str = Field(min_length=1, max_length=100)
+    status: str = Field(min_length=1, max_length=32)
+    message: str = Field(min_length=1, max_length=500)
+    attempt: int | None = None
+    target_system_id: str | None = None
+    target_name: str | None = None
+    delivery_rule: str | None = None
+    external_reference: str | None = None
+    error: str | None = None
+    details: dict[str, Any] = Field(default_factory=dict)
+    started_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    completed_at: datetime | None = None
+
+
 class DocumentJob(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     status: JobStatus = JobStatus.RECEIVED

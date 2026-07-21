@@ -149,6 +149,10 @@ function renderDetail(job) {
         <pre class="metadata">${esc(JSON.stringify(job.metadata, null, 2))}</pre>
       </section>
       ${canReview ? reviewForm(job) : ""}
+      <section class="panel">
+        <div class="panel-header"><h3>Aktivitäts- und Zustellprotokoll</h3></div>
+        <div id="event-timeline" class="event-timeline"><div class="timeline-empty">Protokoll wird geladen …</div></div>
+      </section>
       ${historyPanel(job)}
     </div>`;
   $("#review-form")?.addEventListener("submit", submitReview);
@@ -156,6 +160,38 @@ function renderDetail(job) {
   $("#release-job")?.addEventListener("click", () => mutateJob(`/v1/jobs/${job.id}/release`, "POST", "Dokument freigegeben"));
   $("#retry-job")?.addEventListener("click", () => mutateJob(`/v1/jobs/${job.id}/retry`, "POST", "Retry eingeplant"));
   $("#delete-job")?.addEventListener("click", () => deleteJob(job));
+  loadJobEvents(job.id);
+}
+
+async function loadJobEvents(jobId) {
+  const timeline = $("#event-timeline");
+  if (!timeline) return;
+  try {
+    const events = await api(`/v1/jobs/${jobId}/events`);
+    if (state.selectedId !== jobId || !$("#event-timeline")) return;
+    timeline.innerHTML = events.length ? [...events].reverse().map(event => {
+      const duration = event.completed_at
+        ? Math.max(0, new Date(event.completed_at) - new Date(event.started_at))
+        : null;
+      const meta = [
+        event.target_name,
+        event.attempt ? `Versuch ${event.attempt}` : null,
+        duration !== null ? `${duration} ms` : null,
+        event.delivery_rule ? `Regel: ${event.delivery_rule}` : null
+      ].filter(Boolean).map(esc).join(" · ");
+      return `<article class="timeline-event ${event.event_type}">
+        <span class="timeline-marker" aria-hidden="true"></span>
+        <div class="timeline-body">
+          <div class="timeline-heading"><strong>${esc(event.message)}</strong><time>${formatTime(event.started_at)}</time></div>
+          ${meta ? `<div class="timeline-meta">${meta}</div>` : ""}
+          ${event.external_reference ? `<div class="timeline-reference">Referenz: ${esc(event.external_reference)}</div>` : ""}
+          ${event.error ? `<div class="timeline-error">${esc(event.error)}</div>` : ""}
+        </div>
+      </article>`;
+    }).join("") : '<div class="timeline-empty">Für diesen Job sind noch keine Ereignisse vorhanden.</div>';
+  } catch (error) {
+    if (timeline) timeline.innerHTML = `<div class="timeline-error">${esc(error.message)}</div>`;
+  }
 }
 
 async function deleteJob(job) {

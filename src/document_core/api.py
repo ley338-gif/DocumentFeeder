@@ -23,6 +23,7 @@ from .models import (
     InputChannel,
     InputChannelCreate,
     InputChannelUpdate,
+    JobEvent,
     JobListResponse,
     JobStatsResponse,
     JobStatus,
@@ -362,6 +363,13 @@ def get_job(job_id: str) -> DocumentJob:
     raise HTTPException(status_code=404, detail="Job nicht gefunden")
 
 
+@app.get("/v1/jobs/{job_id}/events", response_model=list[JobEvent])
+def get_job_events(job_id: str) -> list[JobEvent]:
+    if store.get(job_id) is None:
+        raise HTTPException(status_code=404, detail="Job nicht gefunden")
+    return store.list_events(job_id)
+
+
 @app.get("/v1/jobs/{job_id}/content", response_class=FileResponse)
 def get_job_content(job_id: str, download: bool = False) -> FileResponse:
     job = store.get(job_id)
@@ -409,6 +417,14 @@ def retry_job(job_id: str) -> DocumentJob:
     retried = store.retry_failed(job_id)
     if retried is None:
         raise HTTPException(status_code=409, detail="Jobstatus wurde zwischenzeitlich geändert")
+    store.save_event(
+        JobEvent(
+            job_id=retried.id,
+            event_type="manual_retry",
+            status=JobStatus.RECEIVED.value,
+            message="Manueller Retry wurde eingeplant",
+        )
+    )
     return retried
 
 

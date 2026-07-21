@@ -8,7 +8,7 @@ class TargetConnector(ABC):
     def healthcheck(self) -> bool: ...
 ```
 
-`deliver` muss bei Wiederholung sicher sein (Idempotenzschlüssel: `job.id` oder `sha256`) und eine externe Referenz zurückgeben. Fehler dürfen nicht verschluckt werden; die Pipeline setzt den Job auf `failed`.
+`deliver` muss bei Wiederholung sicher sein (Idempotenzschlüssel: `job.id` oder `sha256`) und eine externe Referenz zurückgeben. Vor manuellen Zustellungen beansprucht ein atomarer Datenbankwechsel den Job exklusiv. Fehler dürfen nicht verschluckt werden; die Pipeline setzt den Job auf `failed`.
 
 ## Zielsystem-Adapter
 

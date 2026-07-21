@@ -27,11 +27,15 @@ flowchart LR
 - `pipeline.py`: Orchestrierung und Statusübergänge.
 - `processing.py`: Text/OCR, Regeln und später KI-Strategien.
 - `connectors.py`: Zielsystemvertrag und Referenzimplementierung.
-- `store.py`: einfacher JSON-Jobstore für das MVP.
+- `store.py`: SQL-Repository für PostgreSQL und den SQLite-Test-/Entwicklungsfallback.
 
 ## Statusmodell
 
 `received → processing → delivered | quarantined | failed`
+
+Bei manueller Freigabe gilt zusätzlich
+`quarantined → delivering → delivered | failed`. Der atomare Wechsel nach `delivering`
+ist der Delivery-Claim und verhindert parallele Connector-Aufrufe.
 
 Jeder Job besitzt ID, Hash, Quelle, Originalname, Status, Metadaten, Fehler und Zeitstempel. Review-Entscheidungen werden mit Bearbeiter, Begründung und Änderungen protokolliert. Für Produktion sind Rollen/Rechte, Verschlüsselung, Aufbewahrung und Löschkonzepte vor Verarbeitung echter Fachdaten verpflichtend.
 
@@ -41,7 +45,8 @@ getrennt; Connector-spezifische Policies bestimmen, ob eine Routing-Referenz Pfl
 
 ## Nächste technische Grenzen
 
-- Der JSON-Store wird durch PostgreSQL und eine Event-/Queue-Lösung ersetzt.
+- Die synchrone Verarbeitung wird als nächster Schritt durch einen Worker und eine
+  persistente Queue ersetzt.
 - Der synchrone Prozessor wird ein Worker; die API antwortet dann mit `202 Accepted`.
 - PDF-Text-Layer und mehrseitiger OCR-Fallback sind implementiert; als nächster Schritt
   sollte die Extraktion hinter ein explizites Adapter-Interface gezogen werden.

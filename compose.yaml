@@ -8,6 +8,11 @@ services:
         required: false
     environment:
       DOCUMENT_CORE_DATA_DIR: /data
+      DOCUMENT_CORE_DATABASE_URL: postgresql+psycopg://documentcore:documentcore@postgres:5432/documentcore
+      DOCUMENT_CORE_DATABASE_AUTO_CREATE: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
     volumes:
       - ./data:/data
     restart: unless-stopped
@@ -17,3 +22,22 @@ services:
       timeout: 3s
       retries: 5
 
+  postgres:
+    image: postgres:17-alpine
+    ports:
+      - "127.0.0.1:5432:5432"
+    environment:
+      POSTGRES_DB: documentcore
+      POSTGRES_USER: documentcore
+      POSTGRES_PASSWORD: documentcore
+    volumes:
+      - document-core-db:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U documentcore -d documentcore"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  document-core-db:

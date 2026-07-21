@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 class JobStatus(StrEnum):
     RECEIVED = "received"
     PROCESSING = "processing"
+    DELIVERING = "delivering"
     DELIVERED = "delivered"
     QUARANTINED = "quarantined"
     FAILED = "failed"

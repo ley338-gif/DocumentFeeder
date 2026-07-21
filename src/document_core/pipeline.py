@@ -6,11 +6,11 @@ from .config import Settings
 from .connectors import TargetConnector
 from .models import DocumentJob, JobStatus, ReviewEvent, ReviewRequest
 from .processing import RuleBasedProcessor, TextExtractor, WorkflowRules
-from .store import JobStore
+from .store import JobRepository
 
 
 class DocumentPipeline:
-    def __init__(self, settings: Settings, store: JobStore, connector: TargetConnector):
+    def __init__(self, settings: Settings, store: JobRepository, connector: TargetConnector):
         self.settings = settings
         self.store = store
         self.connector = connector
@@ -20,8 +20,6 @@ class DocumentPipeline:
 
     def ingest(self, source_path: Path, source: str, original_filename: str | None = None) -> DocumentJob:
         content_hash = hashlib.sha256(source_path.read_bytes()).hexdigest()
-        if existing := self.store.find_by_hash(content_hash):
-            return existing
         filename = Path(original_filename or source_path.name).name
         job = DocumentJob(
             source=source,
@@ -30,8 +28,8 @@ class DocumentPipeline:
             sha256=content_hash,
         )
         shutil.copy2(source_path, job.stored_path)
-        self.store.save(job)
-        return self.process(job)
+        persisted, created = self.store.create_if_absent(job)
+        return self.process(persisted) if created else persisted
 
     def process(self, job: DocumentJob) -> DocumentJob:
         job.status = JobStatus.PROCESSING
@@ -81,8 +79,16 @@ class DocumentPipeline:
         job.errors = self.rules.validate(job.document_type, job.routing_reference is not None)
         if job.errors:
             job.status = JobStatus.QUARANTINED
-        else:
+            self.store.save(job)
+            return job
+        if not self.store.claim_delivery(job.id):
+            return self.store.get(job.id) or job
+        job.status = JobStatus.DELIVERING
+        try:
             job.metadata["destination_reference"] = self.connector.deliver(job)
             job.status = JobStatus.DELIVERED
+        except Exception as exc:
+            job.errors.append(str(exc))
+            job.status = JobStatus.FAILED
         self.store.save(job)
         return job

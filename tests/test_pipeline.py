@@ -12,7 +12,7 @@ def test_text_document_reaches_filesystem_connector(tmp_path: Path):
     settings.create_directories()
     source = tmp_path / "bericht.txt"
     source.write_text("Bericht\nBetreff: Beispiel\nReferenz: X-1", encoding="utf-8")
-    pipeline = DocumentPipeline(settings, JobStore(settings.jobs_dir), FilesystemConnector(settings.output_dir))
+    pipeline = DocumentPipeline(settings, JobStore("sqlite://"), FilesystemConnector(settings.output_dir))
 
     job = pipeline.ingest(source, "test")
 

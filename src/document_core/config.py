@@ -7,6 +7,8 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="DOCUMENT_CORE_", env_file=".env")
 
     data_dir: Path = Path("data")
+    database_url: str = "sqlite:///data/document-core.db"
+    database_auto_create: bool = True
     hotfolder_interval: float = 2.0
     connector: str = "filesystem"
     require_routing_reference: bool = False
@@ -28,16 +30,11 @@ class Settings(BaseSettings):
     def quarantine_dir(self) -> Path:
         return self.data_dir / "quarantine"
 
-    @property
-    def jobs_dir(self) -> Path:
-        return self.data_dir / "jobs"
-
     def create_directories(self) -> None:
         for path in (
             self.inbox_dir,
             self.hotfolder_dir,
             self.output_dir,
             self.quarantine_dir,
-            self.jobs_dir,
         ):
             path.mkdir(parents=True, exist_ok=True)

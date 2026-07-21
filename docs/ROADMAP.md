@@ -9,7 +9,8 @@ Ziel: synthetisches Textdokument Ende-zu-Ende vom Eingang zum Dateisystem-Connec
 ## M2 – Robuste Verarbeitung (v0.2)
 
 - PDF/Text-Layer und mehrseitige OCR
-- PostgreSQL, Worker/Queue, Retry und Idempotenz
+- PostgreSQL und atomare Delivery-Claims (umgesetzt)
+- Worker/Queue, Lease-Recovery und Retry
 - Authentisierung, Audit-Events, Upload-Limits und Malware-Prüfung
 - Review-API/-UI für Quarantäne
 - Observability und Betriebsmetriken

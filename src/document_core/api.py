@@ -15,7 +15,7 @@ from .store import JobStore
 
 settings = Settings()
 settings.create_directories()
-store = JobStore(settings.jobs_dir)
+store = JobStore(settings.database_url, create_schema=settings.database_auto_create)
 pipeline = DocumentPipeline(settings, store, FilesystemConnector(settings.output_dir))
 
 
@@ -42,7 +42,13 @@ app = FastAPI(title="Document Core", version="0.1.0", lifespan=lifespan)
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok", "connector": "ok" if pipeline.connector.healthcheck() else "error"}
+    database = "ok" if store.healthcheck() else "error"
+    connector = "ok" if pipeline.connector.healthcheck() else "error"
+    return {
+        "status": "ok" if database == connector == "ok" else "error",
+        "database": database,
+        "connector": connector,
+    }
 
 
 @app.post("/v1/documents", response_model=DocumentJob, status_code=201)
@@ -85,6 +91,6 @@ def release_job(job_id: str) -> DocumentJob:
     job = store.get(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job nicht gefunden")
-    if job.status not in {JobStatus.QUARANTINED, JobStatus.DELIVERED}:
+    if job.status not in {JobStatus.QUARANTINED, JobStatus.DELIVERING, JobStatus.DELIVERED}:
         raise HTTPException(status_code=409, detail="Job kann in diesem Status nicht freigegeben werden")
     return pipeline.release(job)

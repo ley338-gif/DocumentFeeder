@@ -8,6 +8,7 @@ Document Core ist eine erweiterbare, domänenneutrale Dokumenten-Pipeline: Dokum
 
 - REST-API und Hotfolder als Eingangskanäle
 - SHA-256-Deduplizierung und persistente Job-Metadaten
+- PostgreSQL-Persistenz mit Alembic-Migrationen und atomaren Statuswechseln
 - PDF-Text-Layer und seitenweiser OCR-Fallback mit Tesseract
 - regelbasierte Dokumenttyp- und Metadatenextraktion
 - Workflow-Regeln (Pflichtfelder, Quarantäne)
@@ -27,12 +28,17 @@ curl http://localhost:8000/v1/jobs
 
 Hotfolder: Dateien nach `./data/hotfolder` kopieren. Erfolgreiche Ergebnisse landen strukturiert unter `./data/output`, problematische Dokumente unter `./data/quarantine`.
 
+Docker Compose startet API und PostgreSQL. Der Upload-Hash ist in der Datenbank eindeutig;
+Jobs überleben API-Neustarts und parallele Freigaben werden atomar auf genau einen
+Connector-Aufruf begrenzt.
+
 Lokal:
 
 ```bash
 python -m venv .venv
 # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
+alembic upgrade head
 uvicorn document_core.api:app --reload
 pytest
 ```

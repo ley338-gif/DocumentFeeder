@@ -14,7 +14,16 @@ class TargetConnector(ABC):
 
 Der Dateisystem-Connector schreibt Dokument und `metadata.json` strukturiert unter
 dem konfigurierten Ablageordner. Die Standardvorlage lautet
-`{document_type}/{job_id}`. Verfügbar sind außerdem `{year}`, `{month}` und `{reference}`.
+`{document_type}/{job_id}`. Verfügbar sind außerdem `{year}`, `{month}`, `{supplier_name}`
+und `{reference}`. Jahr und Monat stammen vorrangig aus dem erkannten Dokumentdatum;
+unterstützt werden numerische Daten sowie deutsche Monatsnamen. Ohne Dokumentdatum gilt das
+Eingangsdatum. Dynamische Pfadwerte werden als sichere Ordnernamen normalisiert, wobei
+Leerzeichen zu Unterstrichen werden.
+
+Eine Vorlage darf auch einen vollständigen Dateinamen enthalten. Dafür stehen
+`{invoice_number}` und `{extension}` zur Verfügung. Rechnungsnummern werden im Dateinamen
+auf Buchstaben und Ziffern reduziert, beispielsweise
+`{year}-{month}_{supplier_name}_{invoice_number}{extension}`.
 Aufgelöste Pfade müssen innerhalb des Zielordners bleiben. Der generische HTTP-Connector sendet ein JSON-Paket
 per `POST`. `Idempotency-Key` enthält immer die Job-ID; ein optionaler Bearer-Token wird als
 `Authorization`-Header übertragen und von der Verwaltungs-API niemals zurückgegeben.

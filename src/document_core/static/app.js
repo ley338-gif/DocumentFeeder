@@ -110,6 +110,7 @@ function renderDetail(job) {
   const canReview = job.status === "quarantined";
   const canRelease = job.status === "quarantined";
   const canRetry = job.status === "failed";
+  const canDelete = ["failed", "processing", "quarantined"].includes(job.status);
   const previewUrl = `/v1/jobs/${job.id}/content`;
   const target = state.targets.find(item => item.id === job.target_system_id);
   const destination = job.metadata.destination_reference || "Wird bei Zustellung erzeugt";
@@ -122,6 +123,7 @@ function renderDetail(job) {
         <a class="button" href="${previewUrl}?download=true">Herunterladen</a>
         ${canRelease ? '<button id="release-job" class="button primary" type="button">Freigeben</button>' : ""}
         ${canRetry ? '<button id="retry-job" class="button danger" type="button">Erneut versuchen</button>' : ""}
+        ${canDelete ? '<button id="delete-job" class="button danger" type="button">Dokument löschen</button>' : ""}
       </div>
     </div>
     <div class="detail-content">
@@ -153,6 +155,17 @@ function renderDetail(job) {
   $("#review-form")?.addEventListener("input", () => { state.reviewDirty = true; });
   $("#release-job")?.addEventListener("click", () => mutateJob(`/v1/jobs/${job.id}/release`, "POST", "Dokument freigegeben"));
   $("#retry-job")?.addEventListener("click", () => mutateJob(`/v1/jobs/${job.id}/retry`, "POST", "Retry eingeplant"));
+  $("#delete-job")?.addEventListener("click", () => deleteJob(job));
+}
+
+async function deleteJob(job) {
+  if (!window.confirm(`„${job.original_filename}“ dauerhaft löschen? Eine laufende Verarbeitung wird abgebrochen; Job und Arbeitskopie werden entfernt.`)) return;
+  try {
+    await api(`/v1/jobs/${job.id}`, {method: "DELETE"});
+    state.selectedId = null; state.selectedStatus = null; state.jobsSignature = null; state.statsSignature = null;
+    $("#detail-pane").innerHTML = '<div class="empty-detail"><div class="empty-symbol">✓</div><h2>Dokument gelöscht</h2><p>Job und Arbeitskopie wurden dauerhaft entfernt.</p></div>';
+    toast("Dokument gelöscht"); await refreshAll(true, true);
+  } catch (error) { toast(error.message, true); }
 }
 
 function reviewForm(job) {

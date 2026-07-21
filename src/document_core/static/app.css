@@ -163,3 +163,84 @@ h1 { margin: 0; font-size: clamp(32px, 4vw, 54px); line-height: 1.04; letter-spa
   .fact:nth-child(odd) { border-right: 0; }
   .review-form label.wide { grid-column: auto; }
 }
+
+/* Linear-inspired application shell */
+:root {
+  --ink: #202124;
+  --muted: #72737a;
+  --paper: #f7f7f8;
+  --surface: #ffffff;
+  --line: #e6e6e9;
+  --green: #5e6ad2;
+  --green-soft: #eeefff;
+  --blue: #59636e;
+  --blue-soft: #eef0f2;
+  --shadow: 0 1px 2px rgba(18, 18, 23, .04), 0 4px 16px rgba(18, 18, 23, .035);
+}
+
+body { background: var(--paper); font-size: 14px; }
+.topbar {
+  position: fixed; inset: 0 auto 0 0; z-index: 20; width: 232px; height: 100vh;
+  padding: 18px 12px; flex-direction: column; align-items: stretch; justify-content: flex-start;
+  border: 0; border-right: 1px solid #292a2f; background: #1c1c1f; backdrop-filter: none;
+}
+.brand { padding: 4px 8px 20px; color: #f5f5f6; }
+.brand-mark { width: 32px; height: 32px; border-radius: 8px; background: #5e6ad2; }
+.brand strong { font-size: 14px; }
+.brand small { color: #8d8e96; font-size: 9px; }
+.main-nav { display: grid; gap: 3px; padding: 0; background: transparent; }
+.nav-button {
+  position: relative; width: 100%; min-height: 38px; padding: 0 11px; border-radius: 7px;
+  color: #a9aab2; text-align: left; font-size: 13px; font-weight: 550;
+}
+.nav-button:hover { color: #ededf0; background: #292a2f; }
+.nav-button.active { color: #fff; background: #303137; box-shadow: inset 2px 0 #7c85e8; }
+.system-state { margin-top: auto; padding: 12px 9px 3px; border-top: 1px solid #303137; color: #95969e; }
+
+main { max-width: none; margin: 0 0 0 232px; padding: 34px 42px 56px; }
+.hero { align-items: center; margin-bottom: 24px; }
+.eyebrow { color: #777982; font-size: 10px; letter-spacing: .12em; }
+h1 { font-size: clamp(28px, 3vw, 38px); letter-spacing: -.035em; font-weight: 650; }
+.hero-copy { margin-top: 7px; color: #777982; font-size: 14px; }
+.upload-button { min-height: 38px; padding: 0 14px; border-radius: 7px; background: #5e6ad2; box-shadow: 0 2px 8px rgba(94,106,210,.24); font-size: 13px; }
+
+.stats { gap: 8px; margin-bottom: 12px; }
+.stat { padding: 11px 13px; border-radius: 8px; background: #fff; }
+.stat:hover { transform: none; border-color: #cfd0d5; }
+.stat.active { border-color: #9ba2ee; box-shadow: inset 0 0 0 1px #9ba2ee; }
+.stat strong { margin-top: 0; font-size: 20px; font-weight: 620; }
+
+.workspace { min-height: 680px; border-radius: 10px; box-shadow: var(--shadow); }
+.toolbar { padding: 10px; grid-template-columns: 1fr 160px 38px; }
+.toolbar input, .toolbar select, .icon-button { height: 36px; border-radius: 6px; background: #fafafa; }
+.icon-button { font-size: 16px; }
+.job-row { padding: 13px 15px; }
+.job-row:hover { background: #f8f8fa; }
+.job-row.active { background: #f2f3ff; box-shadow: inset 2px 0 #5e6ad2; }
+.badge { padding: 2px 7px; border-radius: 5px; font-size: 10px; }
+.detail-header { padding: 18px 20px 15px; }
+.detail-content { padding: 16px 20px 24px; gap: 12px; }
+.panel { border-radius: 8px; }
+.panel-header { padding: 10px 13px; }
+.button { min-height: 34px; border-radius: 6px; font-size: 12px; }
+.button.primary { border-color: #5e6ad2; background: #5e6ad2; }
+.channel-layout { grid-template-columns: minmax(0, 1fr) 360px; gap: 18px; }
+.channel-card, .channel-form-card { border-radius: 9px; box-shadow: var(--shadow); }
+.channel-card { padding: 15px; }
+.channel-form-card { top: 24px; padding: 18px; }
+.channel-form input, .channel-form select, .review-form input, .review-form select, .review-form textarea { border-radius: 6px; background: #fafafa; }
+.toast { border-radius: 7px; background: #24252a; }
+
+@media (max-width: 900px) {
+  .topbar {
+    position: sticky; inset: auto; width: 100%; height: 64px; padding: 0 14px;
+    flex-direction: row; align-items: center; border-right: 0; border-bottom: 1px solid #292a2f;
+  }
+  .brand { padding: 0; }
+  .brand small { display: none; }
+  .main-nav { position: absolute; top: 64px; left: 0; right: 0; display: flex; overflow-x: auto; padding: 5px 10px; background: #232429; }
+  .nav-button { width: auto; min-width: max-content; padding: 0 12px; }
+  .system-state { margin: 0 0 0 auto; padding: 0; border: 0; }
+  main { margin-left: 0; padding: 66px 16px 42px; }
+  .channel-layout { grid-template-columns: 1fr; }
+}

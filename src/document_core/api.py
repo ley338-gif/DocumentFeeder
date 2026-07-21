@@ -198,7 +198,16 @@ def validate_target(target: TargetSystem) -> None:
 
 
 def validate_path_template(template: str) -> str:
-    allowed = {"document_type", "year", "month", "job_id", "reference"}
+    allowed = {
+        "document_type",
+        "year",
+        "month",
+        "job_id",
+        "reference",
+        "supplier_name",
+        "invoice_number",
+        "extension",
+    }
     try:
         fields = {field for _, field, _, _ in Formatter().parse(template) if field}
     except ValueError as exc:
@@ -401,3 +410,23 @@ def retry_job(job_id: str) -> DocumentJob:
     if retried is None:
         raise HTTPException(status_code=409, detail="Jobstatus wurde zwischenzeitlich geändert")
     return retried
+
+
+@app.delete("/v1/jobs/{job_id}", status_code=204)
+def delete_job(job_id: str) -> Response:
+    existing = store.get(job_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Job nicht gefunden")
+    deleted = store.delete_stalled_job(job_id)
+    if deleted is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Nur Jobs in Verarbeitung, manueller Prüfung oder mit Fehler können gelöscht werden",
+        )
+    stored_path = deleted.stored_path.resolve()
+    inbox = settings.inbox_dir.resolve()
+    if inbox in stored_path.parents:
+        stored_path.unlink(missing_ok=True)
+    quarantine_path = settings.quarantine_dir / f"{deleted.id}-{deleted.original_filename}"
+    quarantine_path.unlink(missing_ok=True)
+    return Response(status_code=204)

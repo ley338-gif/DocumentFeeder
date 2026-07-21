@@ -86,6 +86,7 @@ Referenz: R-12345
 - `PATCH /v1/jobs/{job_id}/review` – quarantänisierten Job korrigieren
 - `POST /v1/jobs/{job_id}/release` – geprüften Job freigeben
 - `POST /v1/jobs/{job_id}/retry` – endgültig fehlgeschlagenen Job neu einplanen
+- `DELETE /v1/jobs/{job_id}` – fehlgeschlagenen oder festhängenden Job samt Arbeitskopie löschen
 - `GET|POST /v1/input-channels` – Eingangskanäle auflisten oder anlegen
 - `PATCH|DELETE /v1/input-channels/{channel_id}` – Eingangskanal ändern oder löschen
 - `GET|POST /v1/target-systems` – Zielsysteme auflisten oder anlegen

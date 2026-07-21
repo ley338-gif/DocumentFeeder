@@ -123,6 +123,19 @@ class RuleBasedProcessor:
         "document_date": r"(?im)^\s*(?:Dokumentdatum|Datum)\s*:\s*([^\r\n]+)",
         "reference_id": r"(?im)^\s*(?:Referenz|Vorgangsnummer|Aktenzeichen)\s*:\s*([\w-]+)",
     }
+    SUPPLIER_PATTERN = re.compile(
+        r"(?im)^\s*([^\r\n]{2,150}?\b(?:GmbH(?:\s*&\s*Co\.\s*KG)?|AG|"
+        r"UG(?:\s*\(haftungsbeschränkt\))?|KG|OHG|e\.K\.|Ltd\.?|Inc\.?))\b"
+    )
+    NUMERIC_DATE_PATTERN = re.compile(r"\b(\d{1,2}\.\d{1,2}\.(?:\d{2}|\d{4}))\b")
+    NAMED_DATE_PATTERN = re.compile(
+        r"(?i)\b((?:\d{1,2}\.\s*)?(?:Januar|Februar|März|Maerz|April|Mai|Juni|"
+        r"Juli|August|September|Oktober|November|Dezember)\s+\d{4})\b"
+    )
+    INVOICE_NUMBER_PATTERN = re.compile(
+        r"(?im)^\s*(?:Rechnungsnummer|Rechnungsnr\.?)\s*:?\s*"
+        r"([A-Z0-9][A-Z0-9 ./_-]{2,50})\s*$"
+    )
 
     def process(self, text: str) -> tuple[str, dict[str, str]]:
         lowered = text.lower()
@@ -135,6 +148,18 @@ class RuleBasedProcessor:
         for key, pattern in self.PATTERNS.items():
             if match := re.search(pattern, text):
                 metadata[key] = match.group(1).strip()
+        if document_type == "invoice" and (supplier := self.SUPPLIER_PATTERN.search(text)):
+            metadata["supplier_name"] = supplier.group(1).strip(" ,.-")
+        if document_type == "invoice" and "document_date" not in metadata:
+            date_match = self.NUMERIC_DATE_PATTERN.search(text)
+            if date_match is None:
+                date_match = self.NAMED_DATE_PATTERN.search(text)
+            if date_match is not None:
+                metadata["document_date"] = date_match.group(1).strip()
+        if document_type == "invoice" and (
+            invoice_number := self.INVOICE_NUMBER_PATTERN.search(text)
+        ):
+            metadata["invoice_number"] = invoice_number.group(1).strip()
         return document_type, metadata
 
 

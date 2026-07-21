@@ -30,6 +30,8 @@ class JobRepository(Protocol):
 
     def retry_failed(self, job_id: str) -> DocumentJob | None: ...
 
+    def delete_stalled_job(self, job_id: str) -> DocumentJob | None: ...
+
     def healthcheck(self) -> bool: ...
 
 
@@ -187,7 +189,7 @@ class JobStore:
         with self.sessions.begin() as session:
             row = session.get(JobRow, job.id)
             if row is None:
-                session.add(JobRow(**values))
+                return
             else:
                 for key, value in values.items():
                     setattr(row, key, value)
@@ -296,6 +298,24 @@ class JobStore:
             if result.rowcount != 1:
                 return None
         return self.get(job_id)
+
+    def delete_stalled_job(self, job_id: str) -> DocumentJob | None:
+        with self.sessions.begin() as session:
+            row = session.scalar(
+                select(JobRow).where(JobRow.id == job_id).with_for_update()
+            )
+            if row is None:
+                return None
+            deletable_statuses = {
+                JobStatus.FAILED.value,
+                JobStatus.PROCESSING.value,
+                JobStatus.QUARANTINED.value,
+            }
+            if row.status not in deletable_statuses:
+                return None
+            job = self._model(row)
+            session.delete(row)
+            return job
 
     def healthcheck(self) -> bool:
         try:

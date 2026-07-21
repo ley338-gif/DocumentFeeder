@@ -60,13 +60,24 @@ eingegangene Jobs nicht.
 
 Dateisystemziele verwenden einen relativen Ablageordner innerhalb von
 `DOCUMENT_CORE_DATA_DIR`. Pfadvorlagen unterstützen `{document_type}`, `{year}`, `{month}`,
-`{job_id}` und `{reference}`. Absolute Pfade, `..` und unbekannte Platzhalter werden
+`{supplier_name}`, `{job_id}` und `{reference}`. Absolute Pfade, `..` und unbekannte Platzhalter werden
 abgelehnt. Externe Windows- oder Netzwerkordner werden als Docker-Volume unterhalb von
 `/data` eingebunden und anschließend als relativer Zielordner konfiguriert.
 
+Für `{year}` und `{month}` wertet Document Core zuerst `metadata.document_date` aus. Neben
+`26.06.2026` werden Monatsnamen wie `Januar 2026` oder `15. Februar 2026` verstanden.
+Lieferantennamen mit einer erkannten Rechtsform wie GmbH, AG oder KG werden bei Rechnungen als
+`supplier_name` gespeichert. Leerzeichen und für Windows unzulässige Zeichen erscheinen im
+Ordnernamen als Unterstriche; ohne Lieferant gilt `Unbekannter_Lieferant`.
+
+Für lesbare Rechnungsdateien kann eine Regel beispielsweise
+`rechnungen/{year}/{month}/{supplier_name}/{year}-{month}_{supplier_name}_{invoice_number}{extension}`
+verwenden. Die Metadaten werden daneben als `<Dateiname>.metadata.json` gespeichert; die
+Job-ID bleibt darin und in der Datenbank erhalten.
+
 Ablageregeln unter `/v1/delivery-rules` überschreiben nach erfolgreicher Klassifikation das
 Standardziel. Beispiel: `invoice` → `Rechnungsarchiv` →
-`rechnungen/{year}/{month}/{job_id}`.
+`rechnungen/{year}/{month}/{supplier_name}/{year}-{month}_{supplier_name}_{invoice_number}{extension}`.
 
 HTTP-Fehler werden wie andere technische Verarbeitungsfehler über die Worker-Queue erneut
 versucht. `last_delivery_at` und `last_error` zeigen den letzten Zielzustand. Tokens liegen im
@@ -101,6 +112,14 @@ Jobstatus und `errors` über `/v1/jobs/{id}` prüfen. `quarantined` bedeutet fac
 `processing` einen vom Worker beanspruchten Job, `delivering` eine manuelle Zustellung und
 `failed` einen nach allen Versuchen technisch fehlgeschlagenen Job. `attempt_count`,
 `next_attempt_at`, `lease_expires_at`, `worker_id` und `last_error` erklären den Queue-Zustand.
+
+Fehlgeschlagene Jobs sowie Jobs in `processing` oder `quarantined` können administrativ über
+die Dokumentdetailansicht oder `DELETE /v1/jobs/{id}` entfernt werden. Dabei werden der
+Datenbankjob, die Inbox-Arbeitskopie und eine vorhandene Quarantänekopie dauerhaft gelöscht.
+Bereits zugestellte Dokumente und Zielsystemdateien können über diesen Endpunkt nicht gelöscht
+werden. Bei aktiver Verarbeitung verhindert der Store, dass der Worker den gelöschten Job
+nachträglich wieder anlegt. Eine bereits begonnene externe Zustellung wird nicht gelöscht und
+ist deshalb von der Aktion ausgenommen. Die Aktion ist im MVP nicht wiederherstellbar.
 
 Die Operator-Konsole ist unter `/`, die OpenAPI-Dokumentation unter `/docs` erreichbar.
 Der Retry-Endpunkt und alle schreibenden UI-Aktionen sind im MVP nicht authentisiert und

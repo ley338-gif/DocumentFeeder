@@ -63,6 +63,11 @@ für den Dokumenttyp. Eine Regel kann Zielsystem und Pfadvorlage überschreiben.
 Pfadauflösung erfolgt erst im Dateisystem-Connector und bleibt auf dessen konfigurierten
 Ablageordner begrenzt.
 
+Die deterministische Rechnungsverarbeitung extrahiert zunächst Lieferanten mit gängigen
+Rechtsformen sowie numerische oder deutsch ausgeschriebene Dokumentdaten. Pfadplatzhalter
+verwenden diese Metadaten, ohne die Originalwerte zu verändern; nur der resultierende
+Ordnername wird sicher normalisiert.
+
 Quarantänisierte Jobs können manuell klassifiziert, mit einer generischen `routing_reference`
 versehen und anschließend erneut validiert werden. Die Freigabe ist idempotent und vom Review
 getrennt; Connector-spezifische Policies bestimmen, ob eine Routing-Referenz Pflicht ist.

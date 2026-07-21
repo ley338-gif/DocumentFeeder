@@ -111,3 +111,19 @@ def test_input_channel_round_trip_and_enabled_filter():
     assert [channel.id for channel in store.list_channels(enabled_only=True)] == [active.id]
     assert store.delete_channel(paused.id) is True
     assert store.get_channel(paused.id) is None
+
+
+def test_failed_and_processing_jobs_can_be_deleted_without_resurrection():
+    store = JobStore("sqlite://")
+    failed = make_job("failed", "1" * 64)
+    failed.status = JobStatus.FAILED
+    store.create_if_absent(failed)
+    active = make_job("active", "2" * 64)
+    store.create_if_absent(active)
+    store.claim_next("worker", 60)
+
+    assert store.delete_stalled_job(failed.id).id == failed.id
+    active_row = store.get(active.id)
+    assert store.delete_stalled_job(active.id).id == active.id
+    store.save(active_row)
+    assert store.get(active.id) is None

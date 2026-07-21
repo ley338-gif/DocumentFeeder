@@ -23,6 +23,7 @@ Die Hauptnavigation folgt dem Arbeitsablauf:
 - Review mit Dokumenttyp und strukturierter Routing-Referenz
 - Freigabe quarantänisierter Dokumente
 - administrativer Retry endgültig fehlgeschlagener Jobs
+- dauerhaftes Löschen fehlgeschlagener und nicht mehr aktiv verarbeiteter Jobs
 - automatische Aktualisierung im Vier-Sekunden-Intervall
 - Eingangskanäle mit Name, Unterordner, Dateimustern und Aktivstatus verwalten
 - Zielsysteme verwalten, Standardziel festlegen und im Review auswählen
@@ -69,6 +70,10 @@ konfigurierten Inbox-Verzeichnisses liegt.
 
 `POST /v1/jobs/{id}/retry` ist nur für `failed` erlaubt. Der Vorgang setzt Versuche und
 technischen Fehlerzustand zurück und plant den Job erneut als `received` ein.
+
+`DELETE /v1/jobs/{id}` ist für `failed`, `processing` und `quarantined` erlaubt. Die
+Oberfläche verlangt eine Bestätigung. Eingegangene, in Zustellung befindliche und bereits
+zugestellte Dokumente sind vor dem Löschen geschützt.
 
 `GET`, `POST`, `PATCH` und `DELETE` unter `/v1/input-channels` bilden die Kanalverwaltung
 ab. Absolute Pfade, Pfadwechsel mit `..` und Dateimuster mit Verzeichnisteilen werden mit

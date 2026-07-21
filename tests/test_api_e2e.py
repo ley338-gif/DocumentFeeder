@@ -325,3 +325,56 @@ def test_delivery_rules_can_be_managed_through_api(tmp_path: Path, monkeypatch):
     assert listing.json()[0]["name"] == "Rechnungsablage"
     assert paused.json()["enabled"] is False
     assert unsafe.status_code == 422
+
+
+def test_failed_document_can_be_deleted_with_working_copy(tmp_path: Path, monkeypatch):
+    settings = configure_api(tmp_path, monkeypatch)
+    api_module.pipeline.settings.worker_max_attempts = 1
+
+    with TestClient(api_module.app) as client:
+        uploaded = client.post(
+            "/v1/documents",
+            files={"file": ("delete-me.pdf", b"not a pdf", "application/pdf")},
+        ).json()
+        failed = process_next_job()
+        stored_path = failed.stored_path
+        response = client.delete(f"/v1/jobs/{uploaded['id']}")
+        missing = client.get(f"/v1/jobs/{uploaded['id']}")
+
+    assert failed.status == JobStatus.FAILED
+    assert stored_path.parent == settings.inbox_dir
+    assert response.status_code == 204
+    assert missing.status_code == 404
+    assert not stored_path.exists()
+
+
+def test_active_processing_document_can_be_deleted(tmp_path: Path, monkeypatch):
+    configure_api(tmp_path, monkeypatch)
+
+    with TestClient(api_module.app) as client:
+        uploaded = client.post(
+            "/v1/documents",
+            files={"file": ("active.txt", b"Bericht", "text/plain")},
+        ).json()
+        api_module.store.claim_next("active-worker", 60)
+        response = client.delete(f"/v1/jobs/{uploaded['id']}")
+        missing = client.get(f"/v1/jobs/{uploaded['id']}")
+
+    assert response.status_code == 204
+    assert missing.status_code == 404
+
+
+def test_quarantined_document_can_be_deleted(tmp_path: Path, monkeypatch):
+    configure_api(tmp_path, monkeypatch)
+
+    with TestClient(api_module.app) as client:
+        uploaded = client.post(
+            "/v1/documents",
+            files={"file": ("unknown.txt", b"synthetic unknown content", "text/plain")},
+        ).json()
+        quarantined = process_next_job()
+        response = client.delete(f"/v1/jobs/{uploaded['id']}")
+
+    assert quarantined.status == JobStatus.QUARANTINED
+    assert response.status_code == 204
+    assert not quarantined.stored_path.exists()

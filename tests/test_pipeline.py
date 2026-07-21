@@ -81,7 +81,11 @@ def test_delivery_rule_routes_invoice_to_configured_folder(tmp_path: Path):
     settings = Settings(data_dir=tmp_path)
     settings.create_directories()
     source = tmp_path / "rechnung.txt"
-    source.write_text("Rechnung\nDatum: 21.07.2026\nReferenz: R-4711", encoding="utf-8")
+    source.write_text(
+        "Telekom Deutschland GmbH\nRechnung\nRechnungsnummer 730 753 0647\n"
+        "Datum: 21. Juni 2026\nReferenz: R-4711",
+        encoding="utf-8",
+    )
     store = JobStore("sqlite://")
     default = TargetSystem(name="Standard", kind="filesystem", is_default=True)
     invoices = TargetSystem(
@@ -97,7 +101,10 @@ def test_delivery_rule_routes_invoice_to_configured_folder(tmp_path: Path):
             name="Rechnungen ablegen",
             document_type="invoice",
             target_system_id=invoices.id,
-            path_template="rechnungen/{year}/{month}/{job_id}",
+            path_template=(
+                "rechnungen/{year}/{month}/{supplier_name}/"
+                "{year}-{month}_{supplier_name}_{invoice_number}{extension}"
+            ),
         )
     )
     pipeline = DocumentPipeline(settings, store, FilesystemConnector(settings.output_dir))
@@ -108,4 +115,22 @@ def test_delivery_rule_routes_invoice_to_configured_folder(tmp_path: Path):
     assert queued.target_system_id == default.id
     assert job.target_system_id == invoices.id
     assert job.metadata["delivery_rule"] == "Rechnungen ablegen"
-    assert (tmp_path / "archive" / "rechnungen" / "2026" / "07" / job.id / "rechnung.txt").exists()
+    assert job.metadata["supplier_name"] == "Telekom Deutschland GmbH"
+    assert (
+        tmp_path
+        / "archive"
+        / "rechnungen"
+        / "2026"
+        / "06"
+        / "Telekom_Deutschland_GmbH"
+        / "2026-06_Telekom_Deutschland_GmbH_7307530647.txt"
+    ).exists()
+    assert (
+        tmp_path
+        / "archive"
+        / "rechnungen"
+        / "2026"
+        / "06"
+        / "Telekom_Deutschland_GmbH"
+        / "2026-06_Telekom_Deutschland_GmbH_7307530647.metadata.json"
+    ).exists()

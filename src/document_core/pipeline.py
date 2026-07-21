@@ -37,9 +37,10 @@ class DocumentPipeline:
         job.status = JobStatus.PROCESSING
         self.store.save(job)
         try:
-            text = self.extractor.extract(job.stored_path)
-            job.text_preview = text[:500]
-            job.document_type, job.metadata = self.processor.process(text)
+            extraction = self.extractor.extract(job.stored_path)
+            job.text_preview = extraction.text[:500]
+            job.document_type, job.metadata = self.processor.process(extraction.text)
+            job.metadata.update(extraction.metadata())
             job.errors = self.rules.validate(job.document_type, job.metadata)
             if job.errors:
                 job.status = JobStatus.QUARANTINED

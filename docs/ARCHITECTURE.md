@@ -39,6 +39,6 @@ Jeder Job besitzt ID, Hash, Quelle, Originalname, Status, Metadaten, Fehler und 
 
 - Der JSON-Store wird durch PostgreSQL und eine Event-/Queue-Lösung ersetzt.
 - Der synchrone Prozessor wird ein Worker; die API antwortet dann mit `202 Accepted`.
-- PDF-Textextraktion und mehrseitige OCR werden als eigener Adapter ergänzt.
+- PDF-Text-Layer und mehrseitiger OCR-Fallback sind implementiert; als nächster Schritt
+  sollte die Extraktion hinter ein explizites Adapter-Interface gezogen werden.
 - KI liefert Vorschlag, Konfidenz, Modellversion und Evidenz; Workflow-Schwellen entscheiden über Auto-Übernahme oder Review.
-

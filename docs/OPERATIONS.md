@@ -27,3 +27,10 @@ Alle Einstellungen beginnen mit `DOCUMENT_CORE_`; siehe `.env.example`. `DOCUMEN
 
 Jobstatus und `errors` über `/v1/jobs/{id}` prüfen. `quarantined` bedeutet fachlich unklar, `failed` technisch fehlgeschlagen. Die MVP-Version führt keinen automatischen Retry aus.
 
+## PDF und OCR
+
+PDF-Seiten mit mindestens 20 extrahierbaren Zeichen verwenden den Text-Layer. Seiten ohne
+brauchbaren Text werden mit PDFium bei 2,5-facher Auflösung gerendert und mit Tesseract
+(`DOCUMENT_CORE_TESSERACT_LANG`) verarbeitet. Die Job-Metadaten nennen Methode, Seitenzahl
+und OCR-Seiten. Beschädigte oder leere PDFs erhalten den Status `failed`; lesbare, aber
+fachlich unbekannte Dokumente werden quarantänisiert.

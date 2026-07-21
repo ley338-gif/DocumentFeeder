@@ -8,7 +8,7 @@ Document Core ist eine erweiterbare Dokumenten-Pipeline: Dokumente kommen per Up
 
 - REST-API und Hotfolder als Eingangskanäle
 - SHA-256-Deduplizierung und persistente Job-Metadaten
-- optionale OCR mit Tesseract, Textdateien funktionieren ohne Zusatzsoftware
+- PDF-Text-Layer und seitenweiser OCR-Fallback mit Tesseract
 - regelbasierte Dokumenttyp- und Metadatenextraktion
 - Workflow-Regeln (Pflichtfelder, Quarantäne)
 - generisches Connector-Interface und Dateisystem-Connector
@@ -64,3 +64,6 @@ Fallnummer: F-12345
 
 OpenAPI/Swagger ist unter `http://localhost:8000/docs` verfügbar.
 
+Bei PDFs wird vorhandener Text direkt übernommen. Nur Seiten ohne brauchbaren Text-Layer
+werden gerendert und per OCR verarbeitet. `metadata.extraction_method`, `page_count` und
+`ocr_pages` machen den verwendeten Weg nachvollziehbar.

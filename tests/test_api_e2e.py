@@ -26,24 +26,24 @@ def test_pdf_upload_reaches_connector_through_http_api(tmp_path: Path, monkeypat
     settings = configure_api(tmp_path, monkeypatch)
     pdf = text_pdf_bytes(
         [
-            ["Arztbrief", "Patient: Erika Mustermann"],
-            ["Geburtsdatum: 12.03.1980", "Fallnummer: API-42"],
+            ["Bericht", "Betreff: Beispielobjekt"],
+            ["Datum: 12.03.2026", "Referenz: API-42"],
         ]
     )
 
     with TestClient(api_module.app) as client:
         response = client.post(
-            "/v1/documents", files={"file": ("arztbrief.pdf", pdf, "application/pdf")}
+            "/v1/documents", files={"file": ("bericht.pdf", pdf, "application/pdf")}
         )
 
     assert response.status_code == 201
     job = response.json()
     assert job["status"] == JobStatus.DELIVERED
-    assert job["document_type"] == "arztbrief"
-    assert job["metadata"]["patient_name"] == "Erika Mustermann"
+    assert job["document_type"] == "report"
+    assert job["metadata"]["subject_name"] == "Beispielobjekt"
     assert job["metadata"]["extraction_method"] == "pdf_text"
-    destination = settings.output_dir / "arztbrief" / job["id"]
-    assert (destination / "arztbrief.pdf").exists()
+    destination = settings.output_dir / "report" / job["id"]
+    assert (destination / "bericht.pdf").exists()
     assert (destination / "metadata.json").exists()
 
 
@@ -76,3 +76,63 @@ def test_broken_pdf_fails_with_diagnostic_error(tmp_path: Path, monkeypatch):
     assert job["status"] == JobStatus.FAILED
     assert job["errors"]
     assert "PDF konnte nicht gelesen werden" in job["errors"][0]
+
+
+def test_quarantined_document_can_be_reviewed_and_released(tmp_path: Path, monkeypatch):
+    settings = configure_api(tmp_path, monkeypatch)
+    pdf = text_pdf_bytes([["Unbekannter Inhalt mit ausreichend Text für die Extraktion."]])
+
+    with TestClient(api_module.app) as client:
+        uploaded = client.post(
+            "/v1/documents", files={"file": ("review.pdf", pdf, "application/pdf")}
+        ).json()
+        assert uploaded["status"] == JobStatus.QUARANTINED
+
+        reviewed_response = client.patch(
+            f"/v1/jobs/{uploaded['id']}/review",
+            json={
+                "reviewer": "test-reviewer",
+                "reason": "Dokument manuell zugeordnet",
+                "document_type": "report",
+                "routing_reference": {
+                    "namespace": "test-system",
+                    "type": "record",
+                    "value": "R-9000",
+                },
+                "metadata": {"subject_name": "Manuell geprüft"},
+            },
+        )
+        assert reviewed_response.status_code == 200
+        reviewed = reviewed_response.json()
+        assert reviewed["review_history"][0]["reviewer"] == "test-reviewer"
+        assert reviewed["routing_reference"]["value"] == "R-9000"
+
+        released_response = client.post(f"/v1/jobs/{uploaded['id']}/release")
+        released_again = client.post(f"/v1/jobs/{uploaded['id']}/release")
+
+    assert released_response.status_code == 200
+    released = released_response.json()
+    assert released["status"] == JobStatus.DELIVERED
+    assert released_again.json()["metadata"]["destination_reference"] == released["metadata"][
+        "destination_reference"
+    ]
+    destination = settings.output_dir / "report" / uploaded["id"]
+    assert (destination / "review.pdf").exists()
+    assert (destination / "metadata.json").exists()
+
+
+def test_non_quarantined_document_cannot_be_reviewed(tmp_path: Path, monkeypatch):
+    configure_api(tmp_path, monkeypatch)
+    pdf = text_pdf_bytes([["Bericht", "Betreff: Bereits klassifiziert"]])
+
+    with TestClient(api_module.app) as client:
+        job = client.post(
+            "/v1/documents", files={"file": ("delivered.pdf", pdf, "application/pdf")}
+        ).json()
+        response = client.patch(
+            f"/v1/jobs/{job['id']}/review",
+            json={"reviewer": "test-reviewer", "reason": "Nicht erlaubt"},
+        )
+
+    assert job["status"] == JobStatus.DELIVERED
+    assert response.status_code == 409

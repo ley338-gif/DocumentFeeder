@@ -6,5 +6,4 @@
 4. `ruff check .` und `pytest` ausführen.
 5. Pull Request mit ausgefüllter Checkliste öffnen.
 
-Keine echten Patienten- oder Gesundheitsdaten in Tests, Logs, Issues oder Commits verwenden. Testdaten müssen vollständig synthetisch sein.
-
+Keine echten personenbezogenen oder vertraulichen Fachdaten in Tests, Logs, Issues oder Commits verwenden. Testdaten müssen vollständig synthetisch sein.

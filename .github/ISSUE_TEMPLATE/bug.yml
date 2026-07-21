@@ -5,7 +5,7 @@ labels: ["type:bug", "status:triage"]
 body:
   - type: markdown
     attributes:
-      value: "Logs anonymisieren; keine echten Patienten- oder Gesundheitsdaten eintragen."
+      value: "Logs anonymisieren; keine echten personenbezogenen oder vertraulichen Fachdaten eintragen."
   - type: textarea
     id: observed
     attributes:
@@ -37,4 +37,3 @@ body:
       label: Auswirkung und mögliche Datenschutzrelevanz
     validations:
       required: true
-

@@ -113,15 +113,15 @@ class RuleBasedProcessor:
     """Deterministic baseline. AI implementations will conform to the same output shape."""
 
     DOCUMENT_TYPES = {
-        "arztbrief": ("arztbrief", "entlassungsbericht", "anamnese"),
-        "laborbefund": ("laborbefund", "laborwerte", "referenzbereich"),
-        "rezept": ("rezept", "verordnung", "wirkstoff"),
-        "rechnung": ("rechnung", "rechnungsnummer", "gesamtbetrag"),
+        "correspondence": ("anschreiben", "korrespondenz", "brief", "letter"),
+        "report": ("bericht", "protokoll", "auswertung", "report"),
+        "invoice": ("rechnung", "rechnungsnummer", "gesamtbetrag", "invoice"),
+        "form": ("formular", "antrag", "fragebogen", "form"),
     }
     PATTERNS = {
-        "patient_name": r"(?im)^\s*Patient(?:in)?\s*:\s*([^\r\n]+)",
-        "birth_date": r"(?im)^\s*Geburtsdatum\s*:\s*(\d{1,2}\.\d{1,2}\.\d{4})",
-        "case_id": r"(?im)^\s*(?:Fallnummer|Fall-ID)\s*:\s*([\w-]+)",
+        "subject_name": r"(?im)^\s*(?:Betreff|Objekt|Name)\s*:\s*([^\r\n]+)",
+        "document_date": r"(?im)^\s*(?:Dokumentdatum|Datum)\s*:\s*([^\r\n]+)",
+        "reference_id": r"(?im)^\s*(?:Referenz|Vorgangsnummer|Aktenzeichen)\s*:\s*([\w-]+)",
     }
 
     def process(self, text: str) -> tuple[str, dict[str, str]]:
@@ -139,13 +139,13 @@ class RuleBasedProcessor:
 
 
 class WorkflowRules:
-    def __init__(self, require_patient: bool = False):
-        self.require_patient = require_patient
+    def __init__(self, require_routing_reference: bool = False):
+        self.require_routing_reference = require_routing_reference
 
-    def validate(self, document_type: str, metadata: dict[str, str]) -> list[str]:
+    def validate(self, document_type: str, has_routing_reference: bool = False) -> list[str]:
         errors = []
         if document_type == "unknown":
             errors.append("Dokumenttyp konnte nicht bestimmt werden")
-        if self.require_patient and not metadata.get("patient_name"):
-            errors.append("Patient konnte nicht bestimmt werden")
+        if self.require_routing_reference and not has_routing_reference:
+            errors.append("Routing-Referenz fehlt")
         return errors

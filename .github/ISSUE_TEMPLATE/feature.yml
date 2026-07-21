@@ -5,7 +5,7 @@ labels: ["type:feature", "status:triage"]
 body:
   - type: markdown
     attributes:
-      value: "Keine echten Patienten- oder Gesundheitsdaten eintragen."
+      value: "Keine echten personenbezogenen oder vertraulichen Fachdaten eintragen."
   - type: textarea
     id: outcome
     attributes:
@@ -40,4 +40,3 @@ body:
       label: Tests und Dokumentation
     validations:
       required: true
-

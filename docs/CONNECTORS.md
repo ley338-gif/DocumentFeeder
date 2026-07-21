@@ -1,6 +1,6 @@
 # Connector-Schnittstelle
 
-`TargetConnector` trennt die Pipeline vom Zielsystem. Ein Adapter implementiert:
+`TargetConnector` trennt die domänenneutrale Pipeline vom Zielsystem. Ein Adapter implementiert:
 
 ```python
 class TargetConnector(ABC):
@@ -10,19 +10,18 @@ class TargetConnector(ABC):
 
 `deliver` muss bei Wiederholung sicher sein (Idempotenzschlüssel: `job.id` oder `sha256`) und eine externe Referenz zurückgeben. Fehler dürfen nicht verschluckt werden; die Pipeline setzt den Job auf `failed`.
 
-## Medical-Office-Adapter (geplant)
+## Zielsystem-Adapter
 
-Vor Implementierung muss die konkret verfügbare Integrationsform geklärt werden (Hersteller-API, Importordner, Schnittstellenmodul). Der Adapter übernimmt Mapping, Authentisierung, Retry und technische Quittung; fachliche Klassifikation bleibt in der Processing Engine.
+Vor Implementierung muss die konkret verfügbare Integrationsform geklärt werden (API, Importordner oder Schnittstellenmodul). Der Adapter übernimmt Mapping, Authentisierung, Retry und technische Quittung; Klassifikation bleibt in der Processing Engine.
 
 Minimaler Mappingvertrag:
 
 | Document Core | Zielsystem |
 |---|---|
 | `job.id` | Idempotenz-/Importreferenz |
-| `metadata.patient_id` | eindeutige Patientenreferenz |
+| `routing_reference` | eindeutige Zielobjektreferenz |
 | `document_type` | Ziel-Dokumentklasse |
 | Originaldatei | Dokumentinhalt |
 | `created_at` | Eingangszeitpunkt |
 
-Patientenname allein reicht nicht für automatische Zuordnung. Produktiv sind eindeutige Identifikatoren und ein Review-Weg bei Mehrdeutigkeit erforderlich.
-
+Freitext allein reicht nicht für automatische Zuordnung. Produktiv sind eindeutige Routing-Referenzen und ein Review-Weg bei Mehrdeutigkeit erforderlich. `namespace`, `type` und `value` erlauben zielsystemspezifische Referenzen, ohne Fachbegriffe in den Kern zu übernehmen.

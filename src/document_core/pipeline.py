@@ -4,7 +4,7 @@ from pathlib import Path
 
 from .config import Settings
 from .connectors import TargetConnector
-from .models import DocumentJob, JobStatus
+from .models import DocumentJob, JobStatus, ReviewEvent, ReviewRequest
 from .processing import RuleBasedProcessor, TextExtractor, WorkflowRules
 from .store import JobStore
 
@@ -16,7 +16,7 @@ class DocumentPipeline:
         self.connector = connector
         self.extractor = TextExtractor(settings.tesseract_lang)
         self.processor = RuleBasedProcessor()
-        self.rules = WorkflowRules(settings.require_patient)
+        self.rules = WorkflowRules(settings.require_routing_reference)
 
     def ingest(self, source_path: Path, source: str, original_filename: str | None = None) -> DocumentJob:
         content_hash = hashlib.sha256(source_path.read_bytes()).hexdigest()
@@ -41,7 +41,7 @@ class DocumentPipeline:
             job.text_preview = extraction.text[:500]
             job.document_type, job.metadata = self.processor.process(extraction.text)
             job.metadata.update(extraction.metadata())
-            job.errors = self.rules.validate(job.document_type, job.metadata)
+            job.errors = self.rules.validate(job.document_type, job.routing_reference is not None)
             if job.errors:
                 job.status = JobStatus.QUARANTINED
                 target = self.settings.quarantine_dir / f"{job.id}-{job.original_filename}"
@@ -52,5 +52,37 @@ class DocumentPipeline:
         except Exception as exc:
             job.errors.append(str(exc))
             job.status = JobStatus.FAILED
+        self.store.save(job)
+        return job
+
+    def review(self, job: DocumentJob, request: ReviewRequest) -> DocumentJob:
+        changes: dict[str, object] = {}
+        if request.document_type is not None and request.document_type != job.document_type:
+            changes["document_type"] = {"from": job.document_type, "to": request.document_type}
+            job.document_type = request.document_type
+        if request.routing_reference is not None and request.routing_reference != job.routing_reference:
+            changes["routing_reference"] = {
+                "from": job.routing_reference.model_dump() if job.routing_reference else None,
+                "to": request.routing_reference.model_dump(),
+            }
+            job.routing_reference = request.routing_reference
+        if request.metadata:
+            changes["metadata"] = request.metadata
+            job.metadata.update(request.metadata)
+        job.review_history.append(
+            ReviewEvent(reviewer=request.reviewer, reason=request.reason, changes=changes)
+        )
+        self.store.save(job)
+        return job
+
+    def release(self, job: DocumentJob) -> DocumentJob:
+        if job.status == JobStatus.DELIVERED:
+            return job
+        job.errors = self.rules.validate(job.document_type, job.routing_reference is not None)
+        if job.errors:
+            job.status = JobStatus.QUARANTINED
+        else:
+            job.metadata["destination_reference"] = self.connector.deliver(job)
+            job.status = JobStatus.DELIVERED
         self.store.save(job)
         return job

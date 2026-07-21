@@ -32,10 +32,10 @@ def text_pdf_bytes(pages: list[list[str]]) -> bytes:
 
 
 def test_extracts_native_text_from_multi_page_pdf(tmp_path: Path):
-    pdf = tmp_path / "arztbrief.pdf"
+    pdf = tmp_path / "bericht.pdf"
     create_text_pdf(
         pdf,
-        [["Arztbrief", "Patient: Erika Mustermann"], ["Fallnummer: PDF-42", "Befund folgt"]],
+        [["Bericht", "Betreff: Beispielobjekt"], ["Referenz: PDF-42", "Auswertung folgt"]],
     )
 
     result = TextExtractor().extract(pdf)
@@ -43,7 +43,7 @@ def test_extracts_native_text_from_multi_page_pdf(tmp_path: Path):
     assert result.method == "pdf_text"
     assert result.page_count == 2
     assert result.ocr_pages == []
-    assert "Erika Mustermann" in result.text
+    assert "Beispielobjekt" in result.text
     assert "PDF-42" in result.text
 
 
@@ -54,11 +54,11 @@ def test_uses_ocr_for_pdf_page_without_text_layer(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(
         extractor,
         "_ocr_pdf_page",
-        lambda _path, _page: "Arztbrief\nPatient: OCR Patient\nFallnummer: OCR-1",
+        lambda _path, _page: "Bericht\nBetreff: OCR Objekt\nReferenz: OCR-1",
     )
 
     result = extractor.extract(pdf)
 
     assert result.method == "pdf_ocr"
     assert result.ocr_pages == [1]
-    assert "OCR Patient" in result.text
+    assert "OCR Objekt" in result.text

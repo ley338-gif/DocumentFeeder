@@ -8,7 +8,7 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 
 from .config import Settings
 from .connectors import FilesystemConnector
-from .models import DocumentJob
+from .models import DocumentJob, JobStatus, ReviewRequest
 from .pipeline import DocumentPipeline
 from .store import JobStore
 
@@ -58,8 +58,9 @@ def upload_document(file: UploadFile = File(...)) -> DocumentJob:
 
 
 @app.get("/v1/jobs", response_model=list[DocumentJob])
-def list_jobs() -> list[DocumentJob]:
-    return store.list()
+def list_jobs(status: JobStatus | None = None) -> list[DocumentJob]:
+    jobs = store.list()
+    return [job for job in jobs if job.status == status] if status else jobs
 
 
 @app.get("/v1/jobs/{job_id}", response_model=DocumentJob)
@@ -68,3 +69,22 @@ def get_job(job_id: str) -> DocumentJob:
         return job
     raise HTTPException(status_code=404, detail="Job nicht gefunden")
 
+
+@app.patch("/v1/jobs/{job_id}/review", response_model=DocumentJob)
+def review_job(job_id: str, request: ReviewRequest) -> DocumentJob:
+    job = store.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job nicht gefunden")
+    if job.status != JobStatus.QUARANTINED:
+        raise HTTPException(status_code=409, detail="Nur quarantänisierte Jobs können geprüft werden")
+    return pipeline.review(job, request)
+
+
+@app.post("/v1/jobs/{job_id}/release", response_model=DocumentJob)
+def release_job(job_id: str) -> DocumentJob:
+    job = store.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job nicht gefunden")
+    if job.status not in {JobStatus.QUARANTINED, JobStatus.DELIVERED}:
+        raise HTTPException(status_code=409, detail="Job kann in diesem Status nicht freigegeben werden")
+    return pipeline.release(job)

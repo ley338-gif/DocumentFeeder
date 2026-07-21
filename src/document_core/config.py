@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     data_dir: Path = Path("data")
     hotfolder_interval: float = 2.0
     connector: str = "filesystem"
-    require_patient: bool = False
+    require_routing_reference: bool = False
     tesseract_lang: str = "deu+eng"
 
     @property
@@ -41,4 +41,3 @@ class Settings(BaseSettings):
             self.jobs_dir,
         ):
             path.mkdir(parents=True, exist_ok=True)
-

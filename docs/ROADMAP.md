@@ -22,23 +22,22 @@ Ziel: synthetisches Textdokument Ende-zu-Ende vom Eingang zum Dateisystem-Connec
 - Schwellwerte: automatisch, manuelle Prüfung, abweisen
 - Regelbasierter Fallback und Feature Flag
 
-## M4 – KI-Patientenerkennung (v0.4)
+## M4 – KI-gestützte Referenzzuordnung (v0.4)
 
 - Kandidatenerkennung aus Dokumentinhalt
-- Abgleich ausschließlich gegen autorisierte Patientenreferenzquelle
+- Abgleich ausschließlich gegen autorisierte Referenzquellen
 - keine automatische Zuordnung bei Mehrdeutigkeit
 - Review, Audit, Qualitäts- und Datenschutztests
 
 ## M5 – Zielsystem-Pilot (v0.5)
 
-- Integrationsweg mit Medical Office verifizieren
+- Integrationsweg mit einem ersten Zielsystem verifizieren
 - Mapping-/Connector-Contract-Tests
 - Sandbox-/Testmandant, Retry, Dead Letter und technische Quittung
 - Pilot mit synthetischen Dokumenten, Security- und Datenschutzfreigabe
 
 ## Definition of Done
 
-Akzeptanzkriterien erfüllt; Tests und Dokumentation aktualisiert; keine echten Patientendaten; Security-/Datenschutzauswirkungen bewertet; Migration und Rollback bei persistenter Änderung beschrieben.
+Akzeptanzkriterien erfüllt; Tests und Dokumentation aktualisiert; keine echten Fach- oder personenbezogenen Daten; Security-/Datenschutzauswirkungen bewertet; Migration und Rollback bei persistenter Änderung beschrieben.
 
 Die Vorlagen unter `.github/ISSUE_TEMPLATE` machen aus jedem Roadmap-Punkt ein ausführbares Issue. Milestones werden nach Repository-Erstellung in GitHub mit obigen Namen und Zielen angelegt.
-

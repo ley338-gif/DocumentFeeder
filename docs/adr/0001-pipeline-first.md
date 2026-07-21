@@ -5,7 +5,7 @@
 
 ## Kontext
 
-Transport, Nachvollziehbarkeit und Zielsystemübergabe müssen unabhängig von Modellqualität funktionieren. Patienten- und Dokumentzuordnung haben hohe fachliche Risiken.
+Transport, Nachvollziehbarkeit und Zielsystemübergabe müssen unabhängig von Modellqualität funktionieren. Dokument- und Referenzzuordnung können hohe fachliche Risiken haben.
 
 ## Entscheidung
 
@@ -14,4 +14,3 @@ Version 0.1 verwendet explizite Regeln und Quarantäne. KI wird später über au
 ## Folgen
 
 Das MVP ist früher testbar und bietet eine messbare Baseline. KI-Features müssen Konfidenz, Modellversion und Evaluation nachweisen; sie umgehen nie Workflow-Regeln oder Auditierung.
-

@@ -1,6 +1,6 @@
 # Document Core
 
-Document Core ist eine erweiterbare Dokumenten-Pipeline: Dokumente kommen per Upload/API oder Hotfolder an, werden verarbeitet, geprüft und über generische Connectoren an Zielsysteme (z. B. Medical Office) übergeben.
+Document Core ist eine erweiterbare, domänenneutrale Dokumenten-Pipeline: Dokumente kommen per Upload/API oder Hotfolder an, werden verarbeitet, geprüft und über generische Connectoren an Zielsysteme übergeben.
 
 ## Status
 
@@ -40,10 +40,10 @@ pytest
 ## Beispielinhalt
 
 ```text
-Arztbrief
-Patient: Erika Mustermann
-Geburtsdatum: 12.03.1980
-Fallnummer: F-12345
+Bericht
+Betreff: Beispielobjekt
+Datum: 12.03.2026
+Referenz: R-12345
 ```
 
 ## Dokumentation
@@ -60,6 +60,8 @@ Fallnummer: F-12345
 - `POST /v1/documents` – Multipart-Upload
 - `GET /v1/jobs` – Jobs auflisten
 - `GET /v1/jobs/{job_id}` – Status und extrahierte Metadaten
+- `PATCH /v1/jobs/{job_id}/review` – quarantänisierten Job korrigieren
+- `POST /v1/jobs/{job_id}/release` – geprüften Job freigeben
 - `GET /health` – Healthcheck
 
 OpenAPI/Swagger ist unter `http://localhost:8000/docs` verfügbar.

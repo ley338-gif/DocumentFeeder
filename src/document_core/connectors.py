@@ -7,7 +7,7 @@ from .models import DocumentJob
 
 
 class TargetConnector(ABC):
-    """Stable destination-system boundary (Medical Office adapters implement this)."""
+    """Stable, domain-neutral destination-system boundary."""
 
     @abstractmethod
     def deliver(self, job: DocumentJob) -> str:
@@ -35,4 +35,3 @@ class FilesystemConnector(TargetConnector):
 
     def healthcheck(self) -> bool:
         return self.output_dir.is_dir()
-

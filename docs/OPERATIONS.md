@@ -12,7 +12,7 @@
 
 ## Konfiguration
 
-Alle Einstellungen beginnen mit `DOCUMENT_CORE_`; siehe `.env.example`. `DOCUMENT_CORE_REQUIRE_PATIENT=true` erzwingt in Phase 1 ein per Regel erkanntes Feld `Patient:`.
+Alle Einstellungen beginnen mit `DOCUMENT_CORE_`; siehe `.env.example`. `DOCUMENT_CORE_REQUIRE_ROUTING_REFERENCE=true` erzwingt vor einer Auslieferung eine strukturierte Zielobjektreferenz.
 
 ## Sicherheit vor Produktivbetrieb
 
@@ -26,6 +26,11 @@ Alle Einstellungen beginnen mit `DOCUMENT_CORE_`; siehe `.env.example`. `DOCUMEN
 ## Fehleranalyse
 
 Jobstatus und `errors` über `/v1/jobs/{id}` prüfen. `quarantined` bedeutet fachlich unklar, `failed` technisch fehlgeschlagen. Die MVP-Version führt keinen automatischen Retry aus.
+
+Quarantänisierte Jobs werden über `PATCH /v1/jobs/{id}/review` korrigiert. Ein Review benötigt
+Bearbeiter und Begründung; Dokumenttyp, Routing-Referenz und Metadaten sind optional. Erst
+`POST /v1/jobs/{id}/release` validiert erneut und liefert aus. Bereits ausgelieferte Jobs
+werden bei wiederholter Freigabe nicht erneut an den Connector gesendet.
 
 ## PDF und OCR
 

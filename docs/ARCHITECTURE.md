@@ -16,7 +16,7 @@ flowchart LR
   W -->|gültig| X["TargetConnector"]
   W -->|unklar| Q["Quarantäne"]
   X --> F["Filesystem"]
-  X -. später .-> MO["Medical Office Adapter"]
+  X -. später .-> TS["Zielsystem-Adapter"]
   C -. Phase 2 .-> AI["KI-Vorschläge"]
   M -. Phase 3 .-> AI
 ```
@@ -33,7 +33,11 @@ flowchart LR
 
 `received → processing → delivered | quarantined | failed`
 
-Jeder Job besitzt ID, Hash, Quelle, Originalname, Status, Metadaten, Fehler und Zeitstempel. Für Produktion sind unveränderliche Audit-Events, Rollen/Rechte, Verschlüsselung, Aufbewahrung und DSGVO-Löschkonzepte vor Verarbeitung echter Patientendaten verpflichtend.
+Jeder Job besitzt ID, Hash, Quelle, Originalname, Status, Metadaten, Fehler und Zeitstempel. Review-Entscheidungen werden mit Bearbeiter, Begründung und Änderungen protokolliert. Für Produktion sind Rollen/Rechte, Verschlüsselung, Aufbewahrung und Löschkonzepte vor Verarbeitung echter Fachdaten verpflichtend.
+
+Quarantänisierte Jobs können manuell klassifiziert, mit einer generischen `routing_reference`
+versehen und anschließend erneut validiert werden. Die Freigabe ist idempotent und vom Review
+getrennt; Connector-spezifische Policies bestimmen, ob eine Routing-Referenz Pflicht ist.
 
 ## Nächste technische Grenzen
 

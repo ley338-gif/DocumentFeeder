@@ -2,16 +2,21 @@ from document_core.processing import RuleBasedProcessor, WorkflowRules
 
 
 def test_rule_based_processing_extracts_type_and_metadata():
-    text = """Arztbrief\nPatient: Erika Mustermann\nGeburtsdatum: 12.03.1980\nFallnummer: F-123"""
+    text = """Bericht\nBetreff: Beispielobjekt\nDatum: 12.03.2026\nReferenz: R-123"""
     document_type, metadata = RuleBasedProcessor().process(text)
-    assert document_type == "arztbrief"
+    assert document_type == "report"
     assert metadata == {
-        "patient_name": "Erika Mustermann",
-        "birth_date": "12.03.1980",
-        "case_id": "F-123",
+        "subject_name": "Beispielobjekt",
+        "document_date": "12.03.2026",
+        "reference_id": "R-123",
     }
 
 
 def test_unknown_document_is_quarantined_by_rules():
-    assert WorkflowRules().validate("unknown", {}) == ["Dokumenttyp konnte nicht bestimmt werden"]
+    assert WorkflowRules().validate("unknown") == ["Dokumenttyp konnte nicht bestimmt werden"]
 
+
+def test_connector_policy_can_require_routing_reference():
+    assert WorkflowRules(require_routing_reference=True).validate("report") == [
+        "Routing-Referenz fehlt"
+    ]

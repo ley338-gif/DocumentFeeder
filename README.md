@@ -100,6 +100,29 @@ Referenz: R-12345
 - [Entscheidungen (ADR)](docs/adr/0001-pipeline-first.md)
 - [Beitragen](CONTRIBUTING.md)
 
+## Continuous Integration
+
+GitHub Actions prüft jeden Pull Request und jeden Push auf `main` reproduzierbar in vier
+getrennten Jobs:
+
+- Ruff, JavaScript-Syntax und die vollständige Unit-Test-Suite mit JUnit-Testbericht
+- Repository-Vertrag gegen PostgreSQL 17
+- vollständige Alembic-Migrationskette sowie Upgrade von Schema `0008` auf den aktuellen Stand
+- reproduzierbarer Build des Docker-Images ohne Veröffentlichung
+
+Die gleichen Kernprüfungen können lokal ausgeführt werden:
+
+```bash
+ruff check src tests migrations
+node --check src/document_core/static/app.js
+pytest -m "not integration"
+docker compose exec document-core alembic current --check-heads
+docker build -t document-core:local .
+```
+
+Der PostgreSQL-Integrationstest benötigt zusätzlich
+`DOCUMENT_CORE_TEST_POSTGRES_URL` und eine zuvor mit `alembic upgrade head` migrierte Datenbank.
+
 ## API
 
 - `POST /v1/documents` – Multipart-Upload (`202 Accepted`, asynchrone Verarbeitung)

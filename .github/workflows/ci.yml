@@ -1,0 +1,132 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  quality-and-tests:
+    name: Ruff and unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install OCR runtime
+        run: sudo apt-get update && sudo apt-get install -y tesseract-ocr tesseract-ocr-deu tesseract-ocr-eng
+      - name: Install project
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[dev,ocr]"
+      - name: Run Ruff
+        run: ruff check src tests migrations
+      - name: Validate frontend JavaScript
+        run: node --check src/document_core/static/app.js
+      - name: Run unit tests
+        run: pytest -m "not integration" --junitxml=test-results/unit.xml
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: unit-test-results
+          path: test-results/unit.xml
+
+  postgres-integration:
+    name: PostgreSQL integration
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: documentcore_test
+          POSTGRES_USER: documentcore
+          POSTGRES_PASSWORD: documentcore
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U documentcore -d documentcore_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DOCUMENT_CORE_DATABASE_URL: postgresql+psycopg://documentcore:documentcore@localhost:5432/documentcore_test
+      DOCUMENT_CORE_TEST_POSTGRES_URL: postgresql+psycopg://documentcore:documentcore@localhost:5432/documentcore_test
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install project
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
+      - name: Migrate database
+        run: alembic upgrade head
+      - name: Run PostgreSQL contract tests
+        run: pytest -m integration --junitxml=test-results/postgres.xml
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: postgres-test-results
+          path: test-results/postgres.xml
+
+  migration-test:
+    name: Alembic migration chain
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: documentcore_migrations
+          POSTGRES_USER: documentcore
+          POSTGRES_PASSWORD: documentcore
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U documentcore -d documentcore_migrations"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DOCUMENT_CORE_DATABASE_URL: postgresql+psycopg://documentcore:documentcore@localhost:5432/documentcore_migrations
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install project
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
+      - name: Test clean installation
+        run: alembic upgrade head
+      - name: Test upgrade from previous production schema
+        run: alembic downgrade 0008 && alembic upgrade head
+      - name: Verify current revision
+        run: alembic current --check-heads
+
+  docker-build:
+    name: Docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-buildx-action@v4
+      - name: Build application image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          tags: document-core:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

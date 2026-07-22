@@ -39,6 +39,11 @@ verwenden, da ein externer Aufruf und ein Datenbankcommit keine gemeinsame Trans
 
 ## Hotfolder verwalten
 
+Vor jedem Eingang prüft Document Core den SHA-256-Hash. Identischer Dateiinhalt verweist
+auf den vorhandenen Job und wird mit `duplicate: true` sowie einem Event
+`duplicate_detected` gekennzeichnet. Der Dateiname darf abweichen. Auch bei parallelen
+Eingängen entfernt die Pipeline eine nicht benötigte zweite Arbeitskopie.
+
 Hotfolder werden persistent in der Datenbank gespeichert und in der Operator-Konsole unter
 **Eingangskanäle** verwaltet. Alternativ steht die API `/v1/input-channels` zur Verfügung.
 `directory` ist immer relativ zu `DOCUMENT_CORE_DATA_DIR`; absolute Pfade und `..` sind

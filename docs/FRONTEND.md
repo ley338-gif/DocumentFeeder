@@ -20,8 +20,9 @@ Die Hauptnavigation folgt dem Arbeitsablauf:
 - Statusübersicht und Filter
 - Suche nach Dateiname, Job-ID, Dokumenttyp und Routing-Referenz
 - paginierte Jobliste
-- Upload mit unmittelbarer Queue-Rückmeldung
+- Einzel- und Mehrfachupload mit getrennten Zählern für neue Dokumente, Duplikate und Fehler
 - Detailansicht mit Queue-, Retry- und Metadateninformationen
+- Klassifizierungsbereich mit Dokumenttyp, Konfidenz, Evidenz, Herkunft und Version
 - persistente Aktivitäts- und Zustell-Timeline mit Ziel, Dauer, Quittung und Fehlern
 - Inline-Vorschau und Download des Originaldokuments
 - Review mit Dokumenttyp und strukturierter Routing-Referenz

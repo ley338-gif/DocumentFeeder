@@ -77,6 +77,7 @@ class DocumentJob(BaseModel):
     last_error: str | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    duplicate: bool = False
 
 
 class JobListResponse(BaseModel):

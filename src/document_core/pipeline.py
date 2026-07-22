@@ -37,6 +37,10 @@ class DocumentPipeline:
     def ingest(self, source_path: Path, source: str, original_filename: str | None = None) -> DocumentJob:
         content_hash = hashlib.sha256(source_path.read_bytes()).hexdigest()
         filename = Path(original_filename or source_path.name).name
+        existing = self.store.find_by_hash(content_hash)
+        if existing is not None:
+            self._record_duplicate(existing, source, filename)
+            return existing.model_copy(update={"duplicate": True})
         job = DocumentJob(
             source=source,
             original_filename=filename,
@@ -58,7 +62,25 @@ class DocumentPipeline:
                 status=JobStatus.RECEIVED,
                 details={"source": source, "filename": filename},
             )
+        else:
+            if job.stored_path != persisted.stored_path:
+                job.stored_path.unlink(missing_ok=True)
+            self._record_duplicate(persisted, source, filename)
+            persisted = persisted.model_copy(update={"duplicate": True})
         return persisted
+
+    def _record_duplicate(self, job: DocumentJob, source: str, filename: str) -> None:
+        self._event(
+            job,
+            "duplicate_detected",
+            "Identischer Dokumentinhalt wurde bereits erfasst",
+            details={
+                "source": source,
+                "filename": filename,
+                "sha256": job.sha256,
+                "existing_job_id": job.id,
+            },
+        )
 
     def process(self, job: DocumentJob) -> DocumentJob:
         if job.status == JobStatus.RECEIVED:

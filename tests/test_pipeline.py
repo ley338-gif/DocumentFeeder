@@ -36,7 +36,21 @@ def test_text_document_reaches_filesystem_connector(tmp_path: Path):
 
     duplicate = pipeline.ingest(source, "test")
     assert duplicate.id == job.id
+    assert duplicate.duplicate is True
     assert len(pipeline.store.list()) == 1
+
+    renamed = tmp_path / "anderer-name.txt"
+    renamed.write_bytes(source.read_bytes())
+    renamed_duplicate = pipeline.ingest(renamed, "test")
+    assert renamed_duplicate.id == job.id
+    assert renamed_duplicate.duplicate is True
+    assert not (settings.inbox_dir / f"{job.sha256[:12]}-anderer-name.txt").exists()
+    duplicate_events = [
+        event
+        for event in pipeline.store.list_events(job.id)
+        if event.event_type == "duplicate_detected"
+    ]
+    assert len(duplicate_events) == 2
 
 
 def test_extracted_null_bytes_are_removed_before_persistence(tmp_path: Path):

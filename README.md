@@ -8,7 +8,7 @@ Document Core ist eine erweiterbare, domänenneutrale Dokumenten-Pipeline: Dokum
 
 - REST-API und Hotfolder als Eingangskanäle
 - persistente Verwaltung mehrerer Hotfolder mit Dateimustern und Aktivstatus
-- SHA-256-Deduplizierung und persistente Job-Metadaten
+- SHA-256-Deduplizierung mit transparenter Upload-Rückmeldung und persistente Job-Metadaten
 - PostgreSQL-Persistenz mit Alembic-Migrationen und atomaren Statuswechseln
 - asynchrone PostgreSQL-Queue mit separatem Worker, Lease-Recovery und Retry
 - PDF-Text-Layer und seitenweiser OCR-Fallback mit Tesseract
@@ -51,6 +51,10 @@ Docker Compose startet API, Worker und PostgreSQL. Uploads antworten sofort mit
 der Verarbeitung seine Lease und wiederholt technische Fehler begrenzt. Der Upload-Hash
 ist eindeutig; Jobs überleben Neustarts und parallele Freigaben werden auf genau einen
 Connector-Aufruf begrenzt.
+
+Identischer Dateiinhalt wird bereits vor dem Kopieren in die Inbox über SHA-256 erkannt.
+Die Upload-Antwort verweist auf den vorhandenen Job und enthält `duplicate: true`; der
+Mehrfachupload zählt neue Dokumente, Duplikate und Fehler getrennt.
 
 Lokal:
 

@@ -7,6 +7,10 @@ const labels = {
   received: "Eingegangen", processing: "In Verarbeitung", quarantined: "Zu prüfen",
   delivering: "In Zustellung", delivered: "Zugestellt", failed: "Fehlgeschlagen"
 };
+const documentTypeLabels = {
+  invoice: "Rechnung", report: "Bericht", correspondence: "Korrespondenz",
+  form: "Formular", unknown: "Nicht erkannt"
+};
 const $ = (selector) => document.querySelector(selector);
 const esc = (value) => String(value ?? "—").replace(/[&<>'"]/g, (char) => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[char]));
 const formatTime = (value) => value ? new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)) : "—";
@@ -144,6 +148,7 @@ function renderDetail(job) {
           <div class="fact"><span>Letzter Fehler</span><strong>${esc(job.last_error)}</strong></div>
         </div>
       </section>
+      ${classificationPanel(job)}
       <section class="panel">
         <div class="panel-header"><h3>Metadaten</h3></div>
         <pre class="metadata">${esc(JSON.stringify(job.metadata, null, 2))}</pre>
@@ -161,6 +166,35 @@ function renderDetail(job) {
   $("#retry-job")?.addEventListener("click", () => mutateJob(`/v1/jobs/${job.id}/retry`, "POST", "Retry eingeplant"));
   $("#delete-job")?.addEventListener("click", () => deleteJob(job));
   loadJobEvents(job.id);
+}
+
+function classificationPanel(job) {
+  const result = job.metadata?.classification;
+  if (!result) return "";
+  const numericConfidence = Number(result.confidence);
+  const confidence = Number.isFinite(numericConfidence)
+    ? Math.max(0, Math.min(1, numericConfidence))
+    : 0;
+  const percent = Math.round(confidence * 100);
+  const level = confidence >= 0.8 ? "high" : confidence >= 0.5 ? "medium" : "low";
+  const provider = result.provider === "rules" ? "Regelbasiert" : result.provider || "Unbekannt";
+  const typeLabel = documentTypeLabels[result.document_type] || result.document_type;
+  const evidence = Array.isArray(result.evidence) ? result.evidence : [];
+  return `<section class="panel classification-panel">
+    <div class="panel-header"><h3>Klassifizierung</h3><span class="classification-source">${esc(provider)}</span></div>
+    <div class="classification-content">
+      <div class="classification-summary">
+        <div><span>Vorgeschlagener Dokumenttyp</span><strong>${esc(typeLabel)}</strong></div>
+        <div class="confidence-value ${level}"><span>Erkennungssicherheit</span><strong>${percent} %</strong></div>
+      </div>
+      <div class="confidence-track" role="progressbar" aria-label="Erkennungssicherheit" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}">
+        <span class="${level}" style="width:${percent}%"></span>
+      </div>
+      ${evidence.length ? `<div class="classification-evidence"><span>Erkannte Hinweise</span><div>${evidence.map(item => `<span>${esc(item)}</span>`).join("")}</div></div>` : ""}
+      ${confidence < 0.6 ? '<div class="classification-warning">Die Erkennung ist unsicher. Bitte Dokumenttyp und Metadaten manuell prüfen.</div>' : ""}
+      <div class="classification-version">Version: ${esc(result.model_version || "—")}</div>
+    </div>
+  </section>`;
 }
 
 async function loadJobEvents(jobId) {
@@ -206,13 +240,14 @@ async function deleteJob(job) {
 
 function reviewForm(job) {
   const routing = job.routing_reference || {};
+  const suggestion = job.metadata?.classification;
   const targetOptions = state.targets.filter(target => target.enabled).map(target =>
     `<option value="${target.id}" ${target.id === job.target_system_id ? "selected" : ""}>${esc(target.name)} (${esc(target.kind)})</option>`
   ).join("");
   return `<section class="panel">
     <div class="panel-header"><h3>Manuelle Prüfung</h3></div>
     <form id="review-form" class="review-form" data-id="${job.id}">
-      <label>Dokumenttyp<input name="document_type" value="${esc(job.document_type === "unknown" ? "" : job.document_type)}" required></label>
+      <label>Dokumenttyp<input name="document_type" value="${esc(job.document_type === "unknown" ? "" : job.document_type)}" required>${suggestion ? `<small>Vorschlag vorausgefüllt · ${Math.round(Number(suggestion.confidence || 0) * 100)} % Sicherheit</small>` : ""}</label>
       <label>Bearbeiter<input name="reviewer" autocomplete="name" required></label>
       <label>Namespace<input name="namespace" value="${esc(routing.namespace || "")}" required></label>
       <label>Referenztyp<input name="reference_type" value="${esc(routing.type || "record")}" required></label>
@@ -252,12 +287,33 @@ async function mutateJob(path, method, successMessage) {
   } catch (error) { toast(error.message, true); }
 }
 
-async function uploadFile(file) {
-  const body = new FormData(); body.append("file", file);
-  try {
-    const job = await api("/v1/documents", { method: "POST", body });
-    toast("Dokument angenommen"); state.offset = 0; await refreshAll(); await selectJob(job.id);
-  } catch (error) { toast(error.message, true); }
+async function uploadFiles(files) {
+  const accepted = [];
+  const duplicates = [];
+  const failed = [];
+  toast(files.length === 1 ? "Dokument wird hochgeladen" : `${files.length} Dokumente werden hochgeladen`);
+  for (const file of files) {
+    const body = new FormData(); body.append("file", file);
+    try {
+      const job = await api("/v1/documents", { method: "POST", body });
+      (job.duplicate ? duplicates : accepted).push(job);
+    } catch (error) {
+      failed.push({file, message: error.message});
+    }
+  }
+  state.offset = 0;
+  state.jobsSignature = null;
+  state.statsSignature = null;
+  await refreshAll(true, true);
+  const lastJob = accepted.at(-1) || duplicates.at(-1);
+  if (lastJob) await selectJob(lastJob.id);
+  if (failed.length) {
+    toast(`${accepted.length} neu, ${duplicates.length} Duplikate, ${failed.length} fehlgeschlagen: ${failed[0].file.name}`, true);
+  } else if (duplicates.length) {
+    toast(`${accepted.length} neu angenommen, ${duplicates.length} Duplikate übersprungen`);
+  } else {
+    toast(accepted.length === 1 ? "Dokument angenommen" : `${accepted.length} Dokumente angenommen`);
+  }
 }
 
 async function refreshAll(includeStats = true, force = false) {
@@ -465,7 +521,11 @@ async function createChannel(event) {
   } catch (error) { toast(error.message, true); }
 }
 
-$("#file-upload").addEventListener("change", event => { if (event.target.files[0]) uploadFile(event.target.files[0]); event.target.value = ""; });
+$("#file-upload").addEventListener("change", event => {
+  const files = Array.from(event.target.files || []);
+  event.target.value = "";
+  if (files.length) uploadFiles(files);
+});
 $("#refresh").addEventListener("click", () => refreshAll(true, true));
 $("#status-filter").addEventListener("change", event => { state.status = event.target.value; state.offset = 0; state.jobsSignature = null; state.statsSignature = null; refreshAll(); });
 $("#search").addEventListener("input", event => { window.clearTimeout(state.searchTimer); state.searchTimer = window.setTimeout(() => { state.query = event.target.value.trim(); state.offset = 0; state.jobsSignature = null; loadJobs(); }, 250); });

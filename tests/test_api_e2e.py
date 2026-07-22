@@ -69,6 +69,25 @@ def test_unknown_pdf_is_quarantined_through_http_api(tmp_path: Path, monkeypatch
     assert (settings.quarantine_dir / f"{job['id']}-unknown.pdf").exists()
 
 
+def test_duplicate_upload_returns_existing_job_with_duplicate_marker(tmp_path: Path, monkeypatch):
+    configure_api(tmp_path, monkeypatch)
+    content = b"Bericht\nBetreff: Doppelter Inhalt"
+
+    with TestClient(api_module.app) as client:
+        first = client.post(
+            "/v1/documents", files={"file": ("original.txt", content, "text/plain")}
+        ).json()
+        duplicate = client.post(
+            "/v1/documents", files={"file": ("kopie.txt", content, "text/plain")}
+        ).json()
+
+    assert first["duplicate"] is False
+    assert duplicate["duplicate"] is True
+    assert duplicate["id"] == first["id"]
+    assert len(api_module.store.list()) == 1
+    assert not (tmp_path / "inbox" / f"{first['sha256'][:12]}-kopie.txt").exists()
+
+
 def test_broken_pdf_fails_with_diagnostic_error(tmp_path: Path, monkeypatch):
     configure_api(tmp_path, monkeypatch)
     api_module.pipeline.settings.worker_retry_base_seconds = 0

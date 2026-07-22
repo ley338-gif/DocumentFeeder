@@ -6,16 +6,27 @@ from pathlib import Path
 from .config import Settings
 from .connectors import FilesystemConnector, HttpConnector, TargetConnector
 from .models import DocumentJob, JobEvent, JobStatus, ReviewEvent, ReviewRequest
-from .processing import RuleBasedProcessor, TextExtractor, WorkflowRules
+from .processing import (
+    DefaultDocumentExtractor,
+    DocumentExtractor,
+    RuleBasedProcessor,
+    WorkflowRules,
+)
 from .store import JobRepository
 
 
 class DocumentPipeline:
-    def __init__(self, settings: Settings, store: JobRepository, connector: TargetConnector):
+    def __init__(
+        self,
+        settings: Settings,
+        store: JobRepository,
+        connector: TargetConnector,
+        extractor: DocumentExtractor | None = None,
+    ):
         self.settings = settings
         self.store = store
         self.connector = connector
-        self.extractor = TextExtractor(settings.tesseract_lang)
+        self.extractor = extractor or DefaultDocumentExtractor(settings.tesseract_lang)
         self.processor = RuleBasedProcessor()
         self.rules = WorkflowRules(settings.require_routing_reference)
 

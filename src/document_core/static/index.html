@@ -14,11 +14,18 @@
       <span><strong>Document Core</strong><small>Operator Console</small></span>
     </a>
     <nav class="main-nav" aria-label="Hauptnavigation">
-      <button class="nav-button active" data-view="documents" data-status="" type="button">Übersicht</button>
-      <button class="nav-button" data-view="documents" data-status="quarantined" type="button">Prüfen</button>
-      <button class="nav-button" data-view="documents" data-status="all" type="button">Dokumente</button>
-      <button class="nav-button" data-view="automation" type="button">Automatisierung</button>
-      <button class="nav-button" data-view="channels" type="button">Einstellungen</button>
+      <div class="nav-section" aria-label="Workflow">
+        <span class="nav-section-label">Workflow</span>
+        <button class="nav-button active" data-view="documents" data-status="" type="button">Übersicht</button>
+        <button class="nav-button" data-view="documents" data-status="quarantined" type="button">Prüfen</button>
+        <button class="nav-button" data-view="documents" data-status="all" type="button">Dokumente</button>
+      </div>
+      <div class="nav-section nav-section-separated" aria-label="Konfiguration">
+        <span class="nav-section-label">Konfiguration</span>
+        <button class="nav-button" data-view="automation" type="button">Automatisierung</button>
+        <button class="nav-button" data-view="channels" type="button">Eingangskanäle</button>
+        <button class="nav-button" data-view="targets" type="button">Zielsysteme</button>
+      </div>
     </nav>
     <div class="system-state"><span id="health-dot" class="health-dot"></span><span id="health-text">System wird geprüft</span></div>
   </header>
@@ -82,7 +89,6 @@
           <h1>Einstellungen</h1>
           <p class="hero-copy">Eingänge und Zielsysteme an einem Ort verwalten.</p>
         </div>
-        <button id="show-targets" class="button" type="button">Zu den Zielsystemen</button>
       </section>
       <section class="channel-layout">
         <div>
@@ -110,7 +116,6 @@
           <h1>Zielsysteme</h1>
           <p class="hero-copy">Dateisystem- und HTTP-Ziele konfigurieren und als Standard festlegen.</p>
         </div>
-        <button id="show-channels" class="button" type="button">Zu den Eingangskanälen</button>
       </section>
       <section class="channel-layout">
         <div>

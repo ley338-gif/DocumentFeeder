@@ -456,9 +456,6 @@ $("#target-form").addEventListener("submit", createTarget);
 $("#reload-targets").addEventListener("click", loadTargets);
 $("#rule-form").addEventListener("submit", createRule);
 $("#reload-rules").addEventListener("click", loadRules);
-$("#show-targets").addEventListener("click", () => switchView("targets"));
-$("#show-channels").addEventListener("click", () => switchView("channels"));
-
 loadTargets();
 refreshAll();
 window.setInterval(async () => {

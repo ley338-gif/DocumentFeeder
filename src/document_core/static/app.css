@@ -189,6 +189,13 @@ body { background: var(--paper); font-size: 14px; }
 .brand strong { font-size: 14px; }
 .brand small { color: #8d8e96; font-size: 9px; }
 .main-nav { display: grid; gap: 3px; padding: 0; background: transparent; }
+.nav-section { display: grid; gap: 3px; }
+.nav-section-separated { margin-top: 13px; padding-top: 11px; border-top: 1px solid #35363b; }
+.nav-section-label {
+  margin: 0 4px 5px; padding: 6px 8px; border: 1px solid #393a41; border-radius: 6px;
+  color: #c7c8d0; background: #27282d; font-size: 10px; font-weight: 700;
+  letter-spacing: .09em; text-transform: uppercase;
+}
 .nav-button {
   position: relative; width: 100%; min-height: 38px; padding: 0 11px; border-radius: 7px;
   color: #a9aab2; text-align: left; font-size: 13px; font-weight: 550;
@@ -254,6 +261,9 @@ h1 { font-size: clamp(28px, 3vw, 38px); letter-spacing: -.035em; font-weight: 65
   .brand { padding: 0; }
   .brand small { display: none; }
   .main-nav { position: absolute; top: 64px; left: 0; right: 0; display: flex; overflow-x: auto; padding: 5px 10px; background: #232429; }
+  .nav-section { display: contents; }
+  .nav-section-separated { margin: 0; padding: 0; border: 0; }
+  .nav-section-label { display: none; }
   .nav-button { width: auto; min-width: max-content; padding: 0 12px; }
   .system-state { margin: 0 0 0 auto; padding: 0; border: 0; }
   main { margin-left: 0; padding: 66px 16px 42px; }

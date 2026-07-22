@@ -12,7 +12,10 @@ Die Hauptnavigation folgt dem Arbeitsablauf:
 - **Prüfen** öffnet direkt die Queue der fachlich unklaren Dokumente.
 - **Dokumente** dient als vollständiges Archiv.
 - **Automatisierung** verwaltet dokumenttypabhängige Ablageregeln.
-- **Einstellungen** bündelt Eingangskanäle und Zielsysteme.
+- Die Navigation ist in **Workflow** und **Konfiguration** gegliedert. Workflow enthält
+  Übersicht, Prüfung und Dokumente. Unterhalb einer Trennlinie bündelt Konfiguration die
+  Bereiche Automatisierung, Eingangskanäle und Zielsysteme. Jeder Bereich besitzt einen
+  gleichwertigen aktiven Zustand; es gibt keinen scheinbar deaktivierten Oberpunkt.
 
 - Statusübersicht und Filter
 - Suche nach Dateiname, Job-ID, Dokumenttyp und Routing-Referenz

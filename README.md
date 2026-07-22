@@ -12,6 +12,7 @@ Document Core ist eine erweiterbare, domänenneutrale Dokumenten-Pipeline: Dokum
 - PostgreSQL-Persistenz mit Alembic-Migrationen und atomaren Statuswechseln
 - asynchrone PostgreSQL-Queue mit separatem Worker, Lease-Recovery und Retry
 - PDF-Text-Layer und seitenweiser OCR-Fallback mit Tesseract
+- austauschbares `DocumentExtractor`-Interface mit integriertem Standardextraktor
 - regelbasierte Dokumenttyp- und Metadatenextraktion
 - Workflow-Regeln (Pflichtfelder, Quarantäne)
 - generisches Connector-Interface, Dateisystem- und HTTP-Connector

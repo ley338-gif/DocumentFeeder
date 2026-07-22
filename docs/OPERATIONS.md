@@ -143,6 +143,12 @@ werden bei wiederholter Freigabe nicht erneut an den Connector gesendet.
 
 ## PDF und OCR
 
+Die Pipeline hängt ausschließlich vom `DocumentExtractor`-Vertrag ab. Standardmäßig wird
+`DefaultDocumentExtractor` mit PDF-Text-Layer, seitenweisem Tesseract-Fallback und
+Klartextunterstützung verwendet. Alternative Extraktoren werden beim Erzeugen der Pipeline
+injiziert und müssen ein `ExtractionResult` mit Text, Methode, Seitenzahl, OCR-Seiten und
+Warnungen liefern.
+
 PDF-Seiten mit mindestens 20 extrahierbaren Zeichen verwenden den Text-Layer. Seiten ohne
 brauchbaren Text werden mit PDFium bei 2,5-facher Auflösung gerendert und mit Tesseract
 (`DOCUMENT_CORE_TESSERACT_LANG`) verarbeitet. Die Job-Metadaten nennen Methode, Seitenzahl

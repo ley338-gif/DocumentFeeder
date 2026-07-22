@@ -4,7 +4,7 @@ from pathlib import Path
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen.canvas import Canvas
 
-from document_core.processing import TextExtractor
+from document_core.processing import DefaultDocumentExtractor
 
 
 def create_text_pdf(path: Path, pages: list[list[str]]) -> None:
@@ -38,7 +38,7 @@ def test_extracts_native_text_from_multi_page_pdf(tmp_path: Path):
         [["Bericht", "Betreff: Beispielobjekt"], ["Referenz: PDF-42", "Auswertung folgt"]],
     )
 
-    result = TextExtractor().extract(pdf)
+    result = DefaultDocumentExtractor().extract(pdf)
 
     assert result.method == "pdf_text"
     assert result.page_count == 2
@@ -50,7 +50,7 @@ def test_extracts_native_text_from_multi_page_pdf(tmp_path: Path):
 def test_uses_ocr_for_pdf_page_without_text_layer(tmp_path: Path, monkeypatch):
     pdf = tmp_path / "scan.pdf"
     create_text_pdf(pdf, [[]])
-    extractor = TextExtractor()
+    extractor = DefaultDocumentExtractor()
     monkeypatch.setattr(
         extractor,
         "_ocr_pdf_page",

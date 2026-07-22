@@ -25,7 +25,7 @@ flowchart LR
 
 - `api.py`: HTTP-Eingang, Kanalverwaltung und Hotfolder-Lifecycle.
 - `pipeline.py`: Orchestrierung und Statusübergänge.
-- `processing.py`: Text/OCR, Regeln und später KI-Strategien.
+- `processing.py`: `DocumentExtractor`-Vertrag, Standard-Text/OCR-Adapter, Regeln und später KI-Strategien.
 - `connectors.py`: Zielsystemvertrag und Referenzimplementierung.
 - `store.py`: SQL-Repository für PostgreSQL und den SQLite-Test-/Entwicklungsfallback.
 
@@ -81,6 +81,7 @@ getrennt; Connector-spezifische Policies bestimmen, ob eine Routing-Referenz Pfl
 
 - Als nächster Robustheitsschritt sollten Worker-Metriken, kontrolliertes Shutdown und
   eine belastbare Fehleranzeige für Eingangskanäle ergänzt werden.
-- PDF-Text-Layer und mehrseitiger OCR-Fallback sind implementiert; als nächster Schritt
-  sollte die Extraktion hinter ein explizites Adapter-Interface gezogen werden.
+- PDF-Text-Layer und mehrseitiger OCR-Fallback liegen hinter dem austauschbaren
+  `DocumentExtractor`-Interface. Weitere OCR-Provider können per Dependency Injection
+  ergänzt werden, ohne die Pipeline zu verändern.
 - KI liefert Vorschlag, Konfidenz, Modellversion und Evidenz; Workflow-Schwellen entscheiden über Auto-Übernahme oder Review.

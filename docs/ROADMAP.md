@@ -9,6 +9,7 @@ Ziel: synthetisches Textdokument Ende-zu-Ende vom Eingang zum Dateisystem-Connec
 ## M2 – Robuste Verarbeitung (v0.2)
 
 - PDF/Text-Layer und mehrseitige OCR
+- austauschbares `DocumentExtractor`-Interface und Contract-Tests (umgesetzt)
 - PostgreSQL und atomare Delivery-Claims (umgesetzt)
 - Worker/Queue, Lease-Recovery und Retry (umgesetzt)
 - Worker-Metriken, kontrolliertes Shutdown und administrativer Retry

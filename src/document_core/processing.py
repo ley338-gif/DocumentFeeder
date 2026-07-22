@@ -1,4 +1,5 @@
 import re
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -10,17 +11,27 @@ class ExtractionResult:
     method: str
     page_count: int = 1
     ocr_pages: list[int] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
     def metadata(self) -> dict[str, Any]:
         return {
             "extraction_method": self.method,
             "page_count": self.page_count,
             "ocr_pages": self.ocr_pages,
+            "extraction_warnings": self.warnings,
         }
 
 
-class TextExtractor:
-    """Extract text without coupling the pipeline to a specific OCR product."""
+class DocumentExtractor(ABC):
+    """Provider-neutral contract for extracting text from a document."""
+
+    @abstractmethod
+    def extract(self, path: Path) -> ExtractionResult:
+        """Return normalized text and diagnostic extraction metadata."""
+
+
+class DefaultDocumentExtractor(DocumentExtractor):
+    """Built-in plain-text, PDF text-layer and Tesseract OCR extractor."""
 
     TEXT_SUFFIXES = {".txt", ".csv", ".json", ".xml"}
 

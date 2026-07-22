@@ -26,3 +26,7 @@ def verify_password(password: str, encoded: str) -> bool:
 def new_session_token() -> tuple[str, str]:
     token = secrets.token_urlsafe(32)
     return token, hashlib.sha256(token.encode()).hexdigest()
+
+
+def new_csrf_token() -> str:
+    return secrets.token_urlsafe(32)

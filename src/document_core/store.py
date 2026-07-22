@@ -470,6 +470,28 @@ class JobStore:
         with self.sessions.begin() as session:
             session.execute(delete(SessionRow).where(SessionRow.token_hash == token_hash))
 
+    def delete_user_sessions(self, user_id: str) -> None:
+        with self.sessions.begin() as session:
+            session.execute(delete(SessionRow).where(SessionRow.user_id == user_id))
+
+    def recent_failed_logins(self, username: str, since: datetime) -> int:
+        with self.sessions() as session:
+            rows = session.scalars(
+                select(AuditEventRow)
+                .where(
+                    AuditEventRow.action == "LOGIN",
+                    AuditEventRow.actor_username == username.lower(),
+                    AuditEventRow.created_at >= since,
+                )
+                .order_by(AuditEventRow.created_at.desc())
+            ).all()
+            failures = 0
+            for row in rows:
+                if row.outcome == "success":
+                    break
+                failures += 1
+            return failures
+
     def save_audit_event(self, event: AuditEvent) -> AuditEvent:
         with self.sessions.begin() as session:
             session.add(AuditEventRow(**event.model_dump()))

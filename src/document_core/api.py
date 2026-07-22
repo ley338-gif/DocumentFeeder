@@ -2,6 +2,7 @@ import asyncio
 import fnmatch
 import tempfile
 import hashlib
+import hmac
 from contextlib import asynccontextmanager, suppress
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -15,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import IntegrityError
 
 from .config import Settings
-from .auth import hash_password, new_session_token, verify_password
+from .auth import hash_password, new_csrf_token, new_session_token, verify_password
 from .connectors import FilesystemConnector
 from .file_validation import DocumentRejectedError, FileTooLargeError
 from .models import (
@@ -81,6 +82,8 @@ async def watch_hotfolder() -> None:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     if settings.auth_enabled and not store.list_users():
+        if not settings.bootstrap_admin_password:
+            raise RuntimeError("Bootstrap-Admin-Passwort muss für die erste Anmeldung gesetzt sein")
         store.save_user(UserAccount(
             username=settings.bootstrap_admin_username,
             display_name="Administrator",
@@ -134,10 +137,15 @@ async def authorize(request: Request, call_next):
     if user is None:
         return JSONResponse({"detail": "Anmeldung erforderlich"}, status_code=401)
     request.state.user = user
+    safe_method = request.method in {"GET", "HEAD", "OPTIONS"}
+    if not safe_method:
+        csrf_cookie = request.cookies.get("document_core_csrf")
+        csrf_header = request.headers.get("X-CSRF-Token")
+        if not csrf_cookie or not csrf_header or not hmac.compare_digest(csrf_cookie, csrf_header):
+            return JSONResponse({"detail": "Ungültiger CSRF-Schutz"}, status_code=403)
     if path.startswith(("/v1/users", "/v1/audit-events")) and user.role != UserRole.ADMIN:
         return JSONResponse({"detail": "Administratorrechte erforderlich"}, status_code=403)
     configuration = ("/v1/input-channels", "/v1/target-systems", "/v1/delivery-rules")
-    safe_method = request.method in {"GET", "HEAD", "OPTIONS"}
     if path.startswith(configuration) and not safe_method and user.role != UserRole.ADMIN:
         return JSONResponse({"detail": "Administratorrechte erforderlich"}, status_code=403)
     self_service = path in {"/v1/auth/me", "/v1/auth/logout"}
@@ -155,10 +163,18 @@ def user_view(user: UserAccount) -> UserView:
 
 @app.post("/v1/auth/login", response_model=UserView)
 def login(request: LoginRequest, response: Response) -> UserView:
+    username = request.username.lower()
+    since = datetime.now(UTC) - timedelta(minutes=settings.login_window_minutes)
+    if store.recent_failed_logins(username, since) >= settings.login_max_attempts:
+        store.save_audit_event(AuditEvent(
+            actor_username=username, action="LOGIN", resource_type="session",
+            outcome="failure", status_code=429, details={"reason": "rate_limited"},
+        ))
+        raise HTTPException(status_code=429, detail="Zu viele Anmeldeversuche. Bitte später erneut versuchen")
     user = store.get_user_by_username(request.username)
     if user is None or not user.active or not verify_password(request.password, user.password_hash):
         store.save_audit_event(AuditEvent(
-            actor_username=request.username,
+            actor_username=username,
             action="LOGIN",
             resource_type="session",
             outcome="failure",
@@ -166,6 +182,7 @@ def login(request: LoginRequest, response: Response) -> UserView:
         ))
         raise HTTPException(status_code=401, detail="Benutzername oder Passwort ist falsch")
     token, token_hash = new_session_token()
+    csrf_token = new_csrf_token()
     store.create_session(token_hash, user.id, datetime.now(UTC) + timedelta(hours=settings.session_ttl_hours))
     user.last_login_at = datetime.now(UTC)
     store.save_user(user)
@@ -177,12 +194,22 @@ def login(request: LoginRequest, response: Response) -> UserView:
         outcome="success",
         status_code=200,
     ))
-    response.set_cookie("document_core_session", token, httponly=True, samesite="strict", secure=False, max_age=settings.session_ttl_hours * 3600)
+    response.set_cookie("document_core_session", token, httponly=True, samesite="strict", secure=settings.session_cookie_secure, max_age=settings.session_ttl_hours * 3600)
+    response.set_cookie("document_core_csrf", csrf_token, httponly=False, samesite="strict", secure=settings.session_cookie_secure, max_age=settings.session_ttl_hours * 3600)
     return user_view(user)
 
 
 @app.get("/v1/auth/me", response_model=UserView)
-def current_user(request: Request) -> UserView:
+def current_user(request: Request, response: Response) -> UserView:
+    if not request.cookies.get("document_core_csrf"):
+        response.set_cookie(
+            "document_core_csrf",
+            new_csrf_token(),
+            httponly=False,
+            samesite="strict",
+            secure=settings.session_cookie_secure,
+            max_age=settings.session_ttl_hours * 3600,
+        )
     return user_view(request.state.user)
 
 
@@ -193,7 +220,10 @@ def update_profile(request: Request, profile: ProfileUpdate) -> UserView:
         user.display_name = profile.display_name.strip()
     if profile.password is not None:
         user.password_hash = hash_password(profile.password)
-    return user_view(store.save_user(user))
+    saved = store.save_user(user)
+    if profile.password is not None:
+        store.delete_user_sessions(user.id)
+    return user_view(saved)
 
 
 @app.post("/v1/auth/logout", status_code=204)
@@ -202,6 +232,7 @@ def logout(request: Request, response: Response) -> Response:
     if token:
         store.delete_session(hashlib.sha256(token.encode()).hexdigest())
     response.delete_cookie("document_core_session")
+    response.delete_cookie("document_core_csrf")
     response.status_code = 204
     return response
 
@@ -237,7 +268,10 @@ def update_user(user_id: str, request: UserUpdate, http_request: Request) -> Use
         not user.active or user.role != UserRole.ADMIN
     ) and len(active_admins) == 1:
         raise HTTPException(status_code=409, detail="Der letzte aktive Admin muss erhalten bleiben")
-    return user_view(store.save_user(user))
+    saved = store.save_user(user)
+    if password or not user.active:
+        store.delete_user_sessions(user.id)
+    return user_view(saved)
 
 
 @app.get("/v1/audit-events", response_model=AuditListResponse)

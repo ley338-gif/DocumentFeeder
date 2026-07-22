@@ -9,6 +9,10 @@ from document_core.pipeline import DocumentPipeline
 from document_core.store import JobStore
 
 
+def enable_csrf(client: TestClient) -> None:
+    client.headers["X-CSRF-Token"] = client.cookies.get("document_core_csrf")
+
+
 def configure_auth_api(tmp_path: Path, monkeypatch) -> None:
     settings = Settings(
         data_dir=tmp_path,
@@ -35,6 +39,7 @@ def test_admin_can_login_and_manage_users(tmp_path: Path, monkeypatch):
             "/v1/auth/login",
             json={"username": "admin", "password": "secure-test-password"},
         )
+        enable_csrf(client)
         created = client.post(
             "/v1/users",
             json={
@@ -63,12 +68,14 @@ def test_viewer_has_read_only_access_and_no_user_management(tmp_path: Path, monk
     configure_auth_api(tmp_path, monkeypatch)
     with TestClient(api_module.app) as admin:
         admin.post("/v1/auth/login", json={"username": "admin", "password": "secure-test-password"})
+        enable_csrf(admin)
         admin.post(
             "/v1/users",
             json={"username": "viewer", "display_name": "Viewer", "role": "viewer", "password": "viewer-test-password"},
         )
     with TestClient(api_module.app) as viewer:
         assert viewer.post("/v1/auth/login", json={"username": "viewer", "password": "viewer-test-password"}).status_code == 200
+        enable_csrf(viewer)
         assert viewer.get("/v1/jobs").status_code == 200
         assert viewer.get("/v1/users").status_code == 403
         assert viewer.get("/v1/input-channels").status_code == 200
@@ -94,9 +101,64 @@ def test_failed_login_is_audited_without_password(tmp_path: Path, monkeypatch):
             "/v1/auth/login",
             json={"username": "admin", "password": "secure-test-password"},
         )
+        enable_csrf(client)
         audit = client.get("/v1/audit-events").json()["items"]
 
     assert failed.status_code == 401
     failure = next(item for item in audit if item["outcome"] == "failure")
     assert failure["action"] == "LOGIN"
     assert "password" not in str(failure["details"]).lower()
+
+
+def test_write_request_without_csrf_token_is_rejected(tmp_path: Path, monkeypatch):
+    configure_auth_api(tmp_path, monkeypatch)
+    with TestClient(api_module.app) as client:
+        client.post(
+            "/v1/auth/login",
+            json={"username": "admin", "password": "secure-test-password"},
+        )
+        response = client.post(
+            "/v1/users",
+            json={
+                "username": "blocked",
+                "display_name": "Blocked",
+                "role": "viewer",
+                "password": "blocked-test-password",
+            },
+        )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Ungültiger CSRF-Schutz"
+
+
+def test_password_change_revokes_existing_session(tmp_path: Path, monkeypatch):
+    configure_auth_api(tmp_path, monkeypatch)
+    with TestClient(api_module.app) as client:
+        client.post(
+            "/v1/auth/login",
+            json={"username": "admin", "password": "secure-test-password"},
+        )
+        enable_csrf(client)
+        changed = client.patch(
+            "/v1/auth/me", json={"password": "new-secure-test-password"}
+        )
+        current = client.get("/v1/auth/me")
+
+    assert changed.status_code == 200
+    assert current.status_code == 401
+
+
+def test_repeated_failed_logins_are_rate_limited(tmp_path: Path, monkeypatch):
+    configure_auth_api(tmp_path, monkeypatch)
+    with TestClient(api_module.app) as client:
+        for _ in range(api_module.settings.login_max_attempts):
+            assert client.post(
+                "/v1/auth/login",
+                json={"username": "unknown", "password": "wrong-password"},
+            ).status_code == 401
+        limited = client.post(
+            "/v1/auth/login",
+            json={"username": "unknown", "password": "wrong-password"},
+        )
+
+    assert limited.status_code == 429

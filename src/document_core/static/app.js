@@ -17,6 +17,11 @@ const esc = (value) => String(value ?? "—").replace(/[&<>'"]/g, (char) => ({"&
 const formatTime = (value) => value ? new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)) : "—";
 
 async function api(path, options = {}) {
+  const method = String(options.method || "GET").toUpperCase();
+  if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
+    const csrf = document.cookie.split("; ").find(item => item.startsWith("document_core_csrf="))?.split("=")[1];
+    if (csrf) { options.headers = new Headers(options.headers || {}); options.headers.set("X-CSRF-Token", decodeURIComponent(csrf)); }
+  }
   const response = await fetch(path, options);
   if (!response.ok) {
     let message = `Anfrage fehlgeschlagen (${response.status})`;
@@ -395,8 +400,9 @@ async function saveProfile(event) {
   const profileForm = event.currentTarget;
   const form = new FormData(profileForm);
   const body = {display_name: form.get("display_name")};
-  if (form.get("password")) body.password = form.get("password");
-  try { state.currentUser = await api("/v1/auth/me", {method:"PATCH", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)}); profileForm.elements.password.value = ""; renderAccount(); toast("Profil gespeichert"); }
+  const passwordChanged = Boolean(form.get("password"));
+  if (passwordChanged) body.password = form.get("password");
+  try { state.currentUser = await api("/v1/auth/me", {method:"PATCH", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)}); profileForm.elements.password.value = ""; renderAccount(); if (passwordChanged) { window.alert("Passwort geändert. Bitte melde dich erneut an."); window.location.reload(); } else { toast("Profil gespeichert"); } }
   catch (error) { toast(error.message, true); }
 }
 

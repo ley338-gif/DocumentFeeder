@@ -168,7 +168,11 @@ wird unten in der Navigation mit Rolle angezeigt und kann dort Anzeigenamen und 
 ändern oder sich abmelden. Sitzungen laufen nach `DOCUMENT_CORE_SESSION_TTL_HOURS` ab.
 
 Für einen TLS-Betrieb muss das Session-Cookie im nächsten Härtungsschritt zusätzlich als
-`Secure` konfiguriert und ein expliziter CSRF-Schutz ergänzt werden.
+`Secure` über `DOCUMENT_CORE_SESSION_COOKIE_SECURE=true` konfiguriert werden. Schreibende
+Browseraktionen verwenden ein Double-Submit-CSRF-Token. Nach
+`DOCUMENT_CORE_LOGIN_MAX_ATTEMPTS` Fehlversuchen innerhalb von
+`DOCUMENT_CORE_LOGIN_WINDOW_MINUTES` wird eine Anmeldung mit `429` gedrosselt. Passwortreset,
+eigene Passwortänderung und Kontodeaktivierung widerrufen alle Sitzungen des Benutzers.
 
 Admins sehen unter **Administration → Systemprotokoll** erfolgreiche und fehlgeschlagene
 Anmeldungen sowie schreibende API-Aktionen. Einträge enthalten Benutzer, Zeitpunkt, Aktion,

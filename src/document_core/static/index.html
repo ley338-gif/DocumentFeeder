@@ -156,8 +156,24 @@
             <label>Name<input name="name" placeholder="z. B. Rechnungen ablegen" required></label>
             <label>Wenn Dokumenttyp<input name="document_type" placeholder="invoice" required></label>
             <label>Dann an Zielsystem<select name="target_system_id" required></select></label>
-            <label>Ablagepfad und Dateiname<input name="path_template" value="rechnungen/{year}/{month}/{supplier_name}/{year}-{month}_{supplier_name}_{invoice_number}{extension}"><small>Lieferant und Rechnungsnummer werden als sichere Dateinamen normalisiert.</small></label>
-            <label>Priorität<input name="priority" type="number" value="100" min="0" max="10000"></label>
+            <div class="template-field">
+              <label for="rule-path-template">Ablagepfad und Dateiname</label>
+              <input id="rule-path-template" name="path_template" value="rechnungen/{year}/{month}/{supplier_name}/{year}-{month}_{supplier_name}_{invoice_number}{extension}">
+              <div class="template-tools">
+                <span>Bausteine einfügen</span>
+                <div class="template-chips">
+                  <button type="button" data-placeholder="{year}">Jahr</button>
+                  <button type="button" data-placeholder="{month}">Monat</button>
+                  <button type="button" data-placeholder="{supplier_name}">Lieferant</button>
+                  <button type="button" data-placeholder="{invoice_number}">Rechnungsnummer</button>
+                  <button type="button" data-placeholder="{document_type}">Dokumenttyp</button>
+                  <button type="button" data-placeholder="{extension}">Dateiendung</button>
+                </div>
+              </div>
+              <div class="template-preview"><span>Beispiel</span><code id="rule-path-preview"></code></div>
+              <small>Schrägstriche erzeugen Ordner. Dynamische Werte werden als sichere Datei- und Ordnernamen normalisiert.</small>
+            </div>
+            <label>Reihenfolge<input name="priority" type="number" value="100" min="0" max="10000"><small>Kleinere Zahlen werden zuerst geprüft.</small></label>
             <label class="checkbox"><input name="enabled" type="checkbox" checked><span>Regel sofort aktivieren</span></label>
             <button class="button primary" type="submit">Regel anlegen</button>
           </form>

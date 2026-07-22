@@ -25,7 +25,8 @@ flowchart LR
 
 - `api.py`: HTTP-Eingang, Kanalverwaltung und Hotfolder-Lifecycle.
 - `pipeline.py`: Orchestrierung und Statusübergänge.
-- `processing.py`: `DocumentExtractor`-Vertrag, Standard-Text/OCR-Adapter, Regeln und später KI-Strategien.
+- `processing.py`: Verträge und Standardadapter für Extraktion und Klassifizierung sowie
+  die deterministische Metadatenextraktion.
 - `connectors.py`: Zielsystemvertrag und Referenzimplementierung.
 - `store.py`: SQL-Repository für PostgreSQL und den SQLite-Test-/Entwicklungsfallback.
 
@@ -72,6 +73,12 @@ Die deterministische Rechnungsverarbeitung extrahiert zunächst Lieferanten mit 
 Rechtsformen sowie numerische oder deutsch ausgeschriebene Dokumentdaten. Pfadplatzhalter
 verwenden diese Metadaten, ohne die Originalwerte zu verändern; nur der resultierende
 Ordnername wird sicher normalisiert.
+
+Die Pipeline hängt für die Dokumenttyperkennung ausschließlich vom `DocumentClassifier`-
+Vertrag ab. Der Standardadapter verwendet nachvollziehbare Schlüsselwortregeln. Jedes
+`ClassificationResult` enthält Vorschlag, Konfidenz, Evidenz, Provider und Modell- oder
+Regelversion. Die Pipeline persistiert diese Angaben in den Jobmetadaten und im Eventlog.
+Noch entscheiden allein die bestehenden Workflow-Regeln über Zustellung oder Review.
 
 Quarantänisierte Jobs können manuell klassifiziert, mit einer generischen `routing_reference`
 versehen und anschließend erneut validiert werden. Die Freigabe ist idempotent und vom Review

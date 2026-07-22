@@ -82,7 +82,12 @@ h1 { margin: 0; font-size: clamp(32px, 4vw, 54px); line-height: 1.04; letter-spa
 .detail-header h2 { margin: 10px 0 4px; font-size: 23px; line-height: 1.2; overflow-wrap: anywhere; }
 .detail-id { color: var(--muted); font: 11px ui-monospace, SFMono-Regular, Consolas, monospace; }
 .detail-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 15px; }
-.button { min-height: 38px; border: 1px solid var(--line); border-radius: 10px; background: white; padding: 0 13px; color: var(--ink); font-weight: 700; }
+.button {
+  display: inline-flex; align-items: center; justify-content: center; min-height: 38px;
+  border: 1px solid var(--line); border-radius: 10px; padding: 0 13px;
+  color: var(--ink); background: white; font: inherit; font-weight: 700;
+  line-height: 1; text-decoration: none; cursor: pointer;
+}
 .button.primary { border-color: var(--green); background: var(--green); color: white; }
 .button.danger { border-color: #eac8c4; color: var(--red); background: #fff9f8; }
 .detail-content { padding: 20px 24px 28px; display: grid; gap: 16px; }
@@ -136,6 +141,15 @@ h1 { margin: 0; font-size: clamp(32px, 4vw, 54px); line-height: 1.04; letter-spa
 .channel-form small { color: #87918f; }
 .channel-form .checkbox { display: flex; grid-template-columns: auto 1fr; align-items: center; }
 .channel-form .checkbox input { width: auto; }
+.template-field { display: grid; gap: 7px; }
+.template-field > label, .template-tools > span { color: var(--muted); font-size: 12px; }
+.template-tools { display: grid; gap: 7px; margin-top: 3px; }
+.template-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.template-chips button { border: 1px solid #dfe0e6; border-radius: 999px; padding: 5px 8px; color: #555dc0; background: #f5f5ff; font-size: 11px; cursor: pointer; }
+.template-chips button:hover { border-color: #aeb3ed; background: #eceeff; }
+.template-preview { display: grid; gap: 4px; margin-top: 3px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 6px; background: #f7f7f8; }
+.template-preview span { color: var(--muted); font-size: 10px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; }
+.template-preview code { overflow-wrap: anywhere; color: var(--ink); font-size: 11px; line-height: 1.45; }
 
 @media (max-width: 1050px) {
   .stats { grid-template-columns: repeat(3, 1fr); }

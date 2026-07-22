@@ -63,6 +63,10 @@ einer eigenen Pfadvorlage. Regeln werden nach Priorität ausgewertet; die erste 
 für den Dokumenttyp gewinnt. Ohne passende Regel bleibt das beim Eingang gespeicherte
 Standardziel erhalten.
 
+Der Pfad-Builder bietet verständlich benannte Bausteine für Jahr, Monat, Lieferant,
+Rechnungsnummer, Dokumenttyp und Dateiendung. Ein Klick fügt den technischen Platzhalter an
+der Cursorposition ein; eine Beispielvorschau zeigt unmittelbar den resultierenden Pfad.
+
 ## API-Verträge
 
 `GET /v1/jobs` akzeptiert wiederholbare `status`-Parameter, `q`, `limit` und `offset` und

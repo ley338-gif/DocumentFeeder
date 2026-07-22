@@ -379,8 +379,30 @@ async function deleteRule(id) {
 async function createRule(event) {
   event.preventDefault(); const form = new FormData(event.currentTarget);
   const body = {name:form.get("name"), document_type:form.get("document_type"), target_system_id:form.get("target_system_id"), path_template:form.get("path_template") || null, priority:Number(form.get("priority")), enabled:form.get("enabled") === "on"};
-  try { await api("/v1/delivery-rules", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)}); event.currentTarget.reset(); event.currentTarget.elements.enabled.checked = true; event.currentTarget.elements.priority.value = 100; toast("Ablageregel angelegt"); await loadRules(); }
+  try { await api("/v1/delivery-rules", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)}); event.currentTarget.reset(); event.currentTarget.elements.enabled.checked = true; event.currentTarget.elements.priority.value = 100; updatePathPreview(); toast("Ablageregel angelegt"); await loadRules(); }
   catch (error) { toast(error.message, true); }
+}
+
+function updatePathPreview() {
+  const input = $("#rule-path-template");
+  const preview = $("#rule-path-preview");
+  if (!input || !preview) return;
+  const examples = {
+    year: "2026", month: "07", supplier_name: "Beispiel_GmbH",
+    invoice_number: "RE12345", document_type: "invoice", extension: ".pdf",
+    job_id: "job-123", reference: "REF-42"
+  };
+  preview.textContent = input.value.replace(/\{([a-z_]+)\}/g, (match, key) => examples[key] || match);
+}
+
+function insertPathPlaceholder(button) {
+  const input = $("#rule-path-template");
+  if (!input) return;
+  const start = input.selectionStart ?? input.value.length;
+  const end = input.selectionEnd ?? start;
+  input.setRangeText(button.dataset.placeholder, start, end, "end");
+  input.focus();
+  updatePathPreview();
 }
 
 async function loadChannels() {
@@ -456,7 +478,10 @@ $("#target-form").addEventListener("submit", createTarget);
 $("#reload-targets").addEventListener("click", loadTargets);
 $("#rule-form").addEventListener("submit", createRule);
 $("#reload-rules").addEventListener("click", loadRules);
+$("#rule-path-template").addEventListener("input", updatePathPreview);
+document.querySelectorAll(".template-chips button").forEach(button => button.addEventListener("click", () => insertPathPlaceholder(button)));
 loadTargets();
+updatePathPreview();
 refreshAll();
 window.setInterval(async () => {
   await refreshAll();

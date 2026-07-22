@@ -26,6 +26,7 @@ def test_text_document_reaches_filesystem_connector(tmp_path: Path):
     assert [event.event_type for event in events] == [
         "ingested",
         "processing_started",
+        "classification_completed",
         "delivery_started",
         "delivery_succeeded",
     ]

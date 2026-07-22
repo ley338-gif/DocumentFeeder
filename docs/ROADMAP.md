@@ -25,7 +25,7 @@ Ziel: synthetisches Textdokument Ende-zu-Ende vom Eingang zum Dateisystem-Connec
 
 ## M3 – KI-Dokumenttyp-Vorschläge (v0.3)
 
-- Provider-neutrales `DocumentClassifier`-Interface
+- Provider-neutrales `DocumentClassifier`-Interface (umgesetzt)
 - Vorschlag plus Konfidenz, Modell-/Promptversion und Evidenz
 - Evaluation mit ausschließlich synthetischem/freigegebenem Datensatz
 - Schwellwerte: automatisch, manuelle Prüfung, abweisen

@@ -91,6 +91,11 @@ Eingang, Verarbeitungsbeginn, Quarantäne, Review, Retry sowie Beginn, Erfolg od
 Zustellung. Zustellereignisse nennen Zielsystem, Regel, Versuch, Zeitpunkte, Zielreferenz und
 Fehlertext. Die Operator-Konsole zeigt dieselben Informationen in der Dokumentdetailansicht.
 
+Das Ereignis `classification_completed` dokumentiert den vorgeschlagenen Dokumenttyp samt
+Konfidenz, Evidenz, Provider und Modell- oder Regelversion. Dieselben Werte stehen unter
+`metadata.classification`. Im aktuellen Stand steuert die Konfidenz noch keine automatische
+Entscheidung; dafür gelten weiterhin ausschließlich die deterministischen Workflow-Regeln.
+
 Beim administrativen Löschen eines noch nicht zugestellten Jobs werden auch dessen Events
 gelöscht. Für produktive Compliance-Anforderungen muss vorab entschieden werden, ob Events
 stattdessen getrennt und manipulationsgeschützt aufbewahrt werden müssen.

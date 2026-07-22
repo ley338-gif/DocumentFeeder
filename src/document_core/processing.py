@@ -120,15 +120,60 @@ class DefaultDocumentExtractor(DocumentExtractor):
             raise RuntimeError(f"OCR nicht verfügbar: {exc}") from exc
 
 
-class RuleBasedProcessor:
-    """Deterministic baseline. AI implementations will conform to the same output shape."""
+@dataclass(frozen=True)
+class ClassificationResult:
+    document_type: str
+    confidence: float
+    evidence: list[str] = field(default_factory=list)
+    provider: str = "rules"
+    model_version: str = "rules-v1"
 
+    def metadata(self) -> dict[str, Any]:
+        return {
+            "document_type": self.document_type,
+            "confidence": self.confidence,
+            "evidence": self.evidence,
+            "provider": self.provider,
+            "model_version": self.model_version,
+        }
+
+
+class DocumentClassifier(ABC):
+    """Provider-neutral contract for suggesting a document type."""
+
+    @abstractmethod
+    def classify(self, text: str) -> ClassificationResult:
+        """Return a suggestion with confidence, evidence and version information."""
+
+
+class RuleBasedDocumentClassifier(DocumentClassifier):
     DOCUMENT_TYPES = {
         "correspondence": ("anschreiben", "korrespondenz", "brief", "letter"),
         "report": ("bericht", "protokoll", "auswertung", "report"),
         "invoice": ("rechnung", "rechnungsnummer", "gesamtbetrag", "invoice"),
         "form": ("formular", "antrag", "fragebogen", "form"),
     }
+
+    def classify(self, text: str) -> ClassificationResult:
+        lowered = text.lower()
+        matches = {
+            name: [keyword for keyword in keywords if keyword in lowered]
+            for name, keywords in self.DOCUMENT_TYPES.items()
+        }
+        document_type = max(matches, key=lambda name: len(matches[name]))
+        evidence = matches[document_type]
+        if not evidence:
+            return ClassificationResult(document_type="unknown", confidence=0.0)
+        total_matches = sum(len(values) for values in matches.values())
+        return ClassificationResult(
+            document_type=document_type,
+            confidence=round(len(evidence) / total_matches, 3),
+            evidence=evidence,
+        )
+
+
+class RuleBasedProcessor:
+    """Deterministic metadata extraction kept separate from classification."""
     PATTERNS = {
         "subject_name": r"(?im)^\s*(?:Betreff|Objekt|Name)\s*:\s*([^\r\n]+)",
         "document_date": r"(?im)^\s*(?:Dokumentdatum|Datum)\s*:\s*([^\r\n]+)",
@@ -148,14 +193,8 @@ class RuleBasedProcessor:
         r"([A-Z0-9][A-Z0-9 ./_-]{2,50})\s*$"
     )
 
-    def process(self, text: str) -> tuple[str, dict[str, str]]:
-        lowered = text.lower()
-        scores = {
-            name: sum(keyword in lowered for keyword in keywords)
-            for name, keywords in self.DOCUMENT_TYPES.items()
-        }
-        document_type = max(scores, key=scores.get) if scores and max(scores.values()) else "unknown"
-        metadata: dict[str, str] = {}
+    def extract_metadata(self, text: str, document_type: str) -> dict[str, Any]:
+        metadata: dict[str, Any] = {}
         for key, pattern in self.PATTERNS.items():
             if match := re.search(pattern, text):
                 metadata[key] = match.group(1).strip()
@@ -171,7 +210,12 @@ class RuleBasedProcessor:
             invoice_number := self.INVOICE_NUMBER_PATTERN.search(text)
         ):
             metadata["invoice_number"] = invoice_number.group(1).strip()
-        return document_type, metadata
+        return metadata
+
+    def process(self, text: str) -> tuple[str, dict[str, Any]]:
+        """Compatibility helper for the original combined processor API."""
+        result = RuleBasedDocumentClassifier().classify(text)
+        return result.document_type, self.extract_metadata(text, result.document_type)
 
 
 class WorkflowRules:

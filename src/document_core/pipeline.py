@@ -8,7 +8,9 @@ from .connectors import FilesystemConnector, HttpConnector, TargetConnector
 from .models import DocumentJob, JobEvent, JobStatus, ReviewEvent, ReviewRequest
 from .processing import (
     DefaultDocumentExtractor,
+    DocumentClassifier,
     DocumentExtractor,
+    RuleBasedDocumentClassifier,
     RuleBasedProcessor,
     WorkflowRules,
 )
@@ -22,11 +24,13 @@ class DocumentPipeline:
         store: JobRepository,
         connector: TargetConnector,
         extractor: DocumentExtractor | None = None,
+        classifier: DocumentClassifier | None = None,
     ):
         self.settings = settings
         self.store = store
         self.connector = connector
         self.extractor = extractor or DefaultDocumentExtractor(settings.tesseract_lang)
+        self.classifier = classifier or RuleBasedDocumentClassifier()
         self.processor = RuleBasedProcessor()
         self.rules = WorkflowRules(settings.require_routing_reference)
 
@@ -72,8 +76,18 @@ class DocumentPipeline:
             extraction = self.extractor.extract(job.stored_path)
             clean_text = extraction.text.replace("\x00", "")
             job.text_preview = clean_text[:500]
-            job.document_type, job.metadata = self.processor.process(clean_text)
+            classification = self.classifier.classify(clean_text)
+            job.document_type = classification.document_type
+            job.metadata = self.processor.extract_metadata(clean_text, job.document_type)
+            job.metadata["classification"] = classification.metadata()
             job.metadata.update(extraction.metadata())
+            self._event(
+                job,
+                "classification_completed",
+                f"Dokumenttyp {job.document_type} vorgeschlagen",
+                attempt=job.attempt_count,
+                details=classification.metadata(),
+            )
             self._apply_delivery_rule(job)
             job.errors = self.rules.validate(job.document_type, job.routing_reference is not None)
             if job.errors:

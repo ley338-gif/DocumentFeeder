@@ -14,6 +14,7 @@ Document Core ist eine erweiterbare, domänenneutrale Dokumenten-Pipeline: Dokum
 - PDF-Text-Layer und seitenweiser OCR-Fallback mit Tesseract
 - austauschbares `DocumentExtractor`-Interface mit integriertem Standardextraktor
 - regelbasierte Dokumenttyp- und Metadatenextraktion
+- provider-neutrale Dokumentklassifizierung mit Konfidenz, Evidenz und Modellversion
 - Workflow-Regeln (Pflichtfelder, Quarantäne)
 - generisches Connector-Interface, Dateisystem- und HTTP-Connector
 - persistente Zielsystemprofile mit Standardziel, Timeout und optionalem Bearer-Token

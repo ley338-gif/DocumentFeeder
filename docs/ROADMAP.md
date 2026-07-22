@@ -18,6 +18,7 @@ Ziel: synthetisches Textdokument Ende-zu-Ende vom Eingang zum Dateisystem-Connec
 - Operator-Konsole für Übersicht, Vorschau, Review, Freigabe und Retry (MVP umgesetzt)
 - persistente Verwaltung mehrerer Hotfolder-Eingänge (MVP umgesetzt)
 - Zielsystemprofile und generischer HTTP-Connector mit Mock-Empfänger (MVP umgesetzt)
+- modulare Connector-Registry mit Fähigkeiten und serverseitigem Entitlement-Gate (MVP umgesetzt)
 - workfloworientierte Operator-Konsole und regelbasierte Dateiablage (MVP umgesetzt)
 - persistentes Job- und Zustellprotokoll mit UI-Timeline (MVP umgesetzt)
 - Review-API/-UI für Quarantäne (MVP umgesetzt)

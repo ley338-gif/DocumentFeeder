@@ -6,7 +6,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from .config import Settings
-from .connectors import FilesystemConnector, HttpConnector, TargetConnector
+from .connector_registry import ConnectorRegistry, create_default_connector_registry
+from .connectors import TargetConnector
 from .file_validation import FileTooLargeError, detect_and_validate_type
 from .malware import MalwareScanner, MalwareScanResult, create_malware_scanner
 from .models import DocumentJob, JobEvent, JobStatus, ReviewEvent, ReviewRequest
@@ -30,10 +31,12 @@ class DocumentPipeline:
         extractor: DocumentExtractor | None = None,
         classifier: DocumentClassifier | None = None,
         malware_scanner: MalwareScanner | None = None,
+        connector_registry: ConnectorRegistry | None = None,
     ):
         self.settings = settings
         self.store = store
         self.connector = connector
+        self.connector_registry = connector_registry or create_default_connector_registry(settings)
         self.extractor = extractor or DefaultDocumentExtractor(
             settings.tesseract_lang,
             max_pdf_pages=settings.max_pdf_pages,
@@ -316,14 +319,7 @@ class DocumentPipeline:
         target = getattr(self.store, "get_target_system", lambda _id: None)(job.target_system_id)
         if target is None or not target.enabled:
             raise RuntimeError("Konfiguriertes Zielsystem ist nicht vorhanden oder deaktiviert")
-        if target.kind == "filesystem":
-            return FilesystemConnector(
-                self.settings.data_dir / target.directory,
-                target.path_template,
-            )
-        if target.kind == "http":
-            return HttpConnector(target)
-        raise RuntimeError(f"Nicht unterstützter Connector-Typ: {target.kind}")
+        return self.connector_registry.create(target)
 
     def _deliver(self, job: DocumentJob) -> str:
         target = (

@@ -195,7 +195,7 @@ class InputChannelUpdate(BaseModel):
 class TargetSystem(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     name: str = Field(min_length=1, max_length=100)
-    kind: str = Field(pattern="^(filesystem|http)$")
+    kind: str = Field(pattern=r"^[a-z][a-z0-9_.-]{1,63}$")
     endpoint_url: str | None = Field(default=None, max_length=1000)
     directory: str = Field(default="output", min_length=1, max_length=300)
     path_template: str = Field(
@@ -215,6 +215,9 @@ class TargetSystemView(BaseModel):
     id: str
     name: str
     kind: str
+    connector_name: str
+    capabilities: list[str]
+    licensed: bool
     endpoint_url: str | None
     directory: str
     path_template: str
@@ -230,7 +233,7 @@ class TargetSystemView(BaseModel):
 
 class TargetSystemCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
-    kind: str = Field(pattern="^(filesystem|http)$")
+    kind: str = Field(pattern=r"^[a-z][a-z0-9_.-]{1,63}$")
     endpoint_url: str | None = Field(default=None, max_length=1000)
     directory: str = Field(default="output", min_length=1, max_length=300)
     path_template: str = Field(

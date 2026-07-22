@@ -10,6 +10,37 @@ class TargetConnector(ABC):
 
 `deliver` muss bei Wiederholung sicher sein (Idempotenzschlüssel: `job.id` oder `sha256`) und eine externe Referenz zurückgeben. Vor manuellen Zustellungen beansprucht ein atomarer Datenbankwechsel den Job exklusiv. Fehler dürfen nicht verschluckt werden; die Pipeline setzt den Job auf `failed`.
 
+## Modul-Registry und Lizenzen
+
+Connectoren werden zentral als `ConnectorModule` registriert. Ein Modul beschreibt seine stabile
+ID, Anzeigename, Version, Fähigkeiten, Factory und optional ein Lizenzmerkmal. Die Pipeline enthält
+keine Fallunterscheidung mehr für einzelne Zielsysteme, sondern bezieht die Implementierung über
+die Registry.
+
+`filesystem` und `http` gehören zum lizenzfreien Kern. Künftige Zusatzmodule verwenden zum
+Beispiel `license_feature="connector.onedrive"`. Aktivierte Merkmale werden derzeit als
+kommaseparierte Liste über `DOCUMENT_CORE_CONNECTOR_ENTITLEMENTS` eingelesen. Das ist bewusst nur
+die Entitlement-Schnittstelle; eine signierte Lizenzdatei oder ein Lizenzdienst kann sie später
+speisen, ohne Connectoren oder Pipeline zu ändern.
+
+Die Lizenz wird serverseitig sowohl beim Speichern eines Zielsystems als auch unmittelbar vor
+jeder Zustellung geprüft. Die UI-Anzeige allein ist keine Sicherheitsgrenze. Bei fehlender Lizenz
+bleibt eine vorhandene Zielkonfiguration erhalten, eine Zustellung wird jedoch kontrolliert
+abgewiesen. `GET /v1/connector-modules` liefert installierte Module, Fähigkeiten und Lizenzstatus.
+
+Minimaler Registrierungsvertrag:
+
+```python
+registry.register(ConnectorModule(
+    id="example",
+    name="Example DMS",
+    version="1.0",
+    capabilities=("document", "metadata"),
+    license_feature="connector.example",
+    factory=ExampleConnector,
+))
+```
+
 ## Implementierte Connectoren
 
 Der Dateisystem-Connector schreibt Dokument und `metadata.json` strukturiert unter

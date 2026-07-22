@@ -148,7 +148,7 @@
           <h2>Zielsystem anlegen</h2>
           <form id="target-form" class="channel-form">
             <label>Name<input name="name" placeholder="z. B. Archiv Sandbox" required maxlength="100"></label>
-            <label>Connector-Typ<select name="kind"><option value="http">HTTP API</option><option value="filesystem">Dateisystem</option></select></label>
+            <label>Connector-Modul<select name="kind" id="connector-kind"><option value="">Module werden geladen …</option></select><small>Nur installierte und lizenzierte Module können verwendet werden.</small></label>
             <label>Endpoint-URL<input name="endpoint_url" type="url" placeholder="http://mock-target:8090/documents"></label>
             <label>Ablageordner in data/<input name="directory" value="output" placeholder="output"></label>
             <label>Ordnerstruktur<input name="path_template" value="{document_type}/{year}/{month}/{job_id}"><small>Platzhalter: document_type, year, month, supplier_name, job_id, reference</small></label>

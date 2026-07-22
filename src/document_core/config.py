@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     worker_max_attempts: int = 3
     worker_retry_base_seconds: int = 5
     connector: str = "filesystem"
+    connector_entitlements: str = ""
     require_routing_reference: bool = False
     tesseract_lang: str = "deu+eng"
     ingest_chunk_size_bytes: int = Field(default=1024 * 1024, ge=4096, le=16 * 1024 * 1024)

@@ -18,6 +18,7 @@ from sqlalchemy.exc import IntegrityError
 from .config import Settings
 from .auth import hash_password, new_csrf_token, new_session_token, verify_password
 from .connectors import FilesystemConnector
+from .licensing import EntitlementRequiredError
 from .file_validation import DocumentRejectedError, FileTooLargeError
 from .models import (
     DocumentJob,
@@ -466,16 +467,28 @@ def delete_input_channel(channel_id: str) -> Response:
 
 
 def target_view(target: TargetSystem) -> TargetSystemView:
+    connector_registry = pipeline.connector_registry
+    module = connector_registry.get(target.kind)
     return TargetSystemView(
         **target.model_dump(exclude={"bearer_token"}),
         has_bearer_token=bool(target.bearer_token),
+        connector_name=module.name if module else target.kind,
+        capabilities=list(module.capabilities) if module else [],
+        licensed=bool(module and connector_registry.entitlements.allows(module.license_feature)),
     )
 
 
 def validate_target(target: TargetSystem) -> None:
+    connector_registry = pipeline.connector_registry
     target.name = target.name.strip()
     if not target.name:
         raise HTTPException(status_code=422, detail="Name darf nicht leer sein")
+    try:
+        connector_registry.require_available(target.kind)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except EntitlementRequiredError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     if target.kind == "http":
         parsed = urlparse(target.endpoint_url or "")
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
@@ -514,6 +527,11 @@ def validate_path_template(template: str) -> str:
 @app.get("/v1/target-systems", response_model=list[TargetSystemView])
 def list_target_systems() -> list[TargetSystemView]:
     return [target_view(target) for target in store.list_target_systems()]
+
+
+@app.get("/v1/connector-modules")
+def list_connector_modules() -> list[dict]:
+    return pipeline.connector_registry.describe()
 
 
 @app.post("/v1/target-systems", response_model=TargetSystemView, status_code=201)

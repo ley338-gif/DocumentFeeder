@@ -452,7 +452,10 @@ async function login(event) {
 
 async function loadTargets() {
   try {
-    state.targets = await api("/v1/target-systems");
+    const [targets, modules] = await Promise.all([api("/v1/target-systems"), api("/v1/connector-modules")]);
+    state.targets = targets;
+    const kindSelect = $("#connector-kind");
+    if (kindSelect) kindSelect.innerHTML = modules.map(module => `<option value="${esc(module.id)}" ${module.licensed ? "" : "disabled"}>${esc(module.name)} ${module.licensed ? "" : "(Lizenz erforderlich)"}</option>`).join("");
     const ruleTarget = $("#rule-form")?.elements.target_system_id;
     if (ruleTarget) ruleTarget.innerHTML = state.targets.filter(target => target.enabled).map(target => `<option value="${target.id}">${esc(target.name)}</option>`).join("");
     const list = $("#target-list");
@@ -466,7 +469,8 @@ async function loadTargets() {
           </div>
           <span class="channel-path">${target.kind === "http" ? esc(target.endpoint_url) : `data/${esc(target.directory)}`}</span>
           <div class="channel-details">
-            <span>Typ <strong>${esc(target.kind)}</strong></span>
+            <span>Modul <strong>${esc(target.connector_name)} ${esc(target.kind)} · v${esc(modules.find(module => module.id === target.kind)?.version || "—")}</strong></span>
+            <span>Funktionen <strong>${target.capabilities.map(esc).join(", ") || "—"}</strong></span>
             <span>Timeout <strong>${target.timeout_seconds}s</strong></span>
             <span>Letzte Zustellung <strong>${formatTime(target.last_delivery_at)}</strong></span>
             <span>Token <strong>${target.has_bearer_token ? "hinterlegt" : "—"}</strong></span>

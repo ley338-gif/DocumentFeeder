@@ -328,6 +328,7 @@ def test_target_systems_can_be_managed_without_exposing_tokens(tmp_path: Path, m
     configure_api(tmp_path, monkeypatch)
 
     with TestClient(api_module.app) as client:
+        modules = client.get("/v1/connector-modules")
         initial = client.get("/v1/target-systems")
         created = client.post(
             "/v1/target-systems",
@@ -344,13 +345,20 @@ def test_target_systems_can_be_managed_without_exposing_tokens(tmp_path: Path, m
         target = created.json()
         listing = client.get("/v1/target-systems")
         delete_default = client.delete(f"/v1/target-systems/{target['id']}")
+        uninstalled = client.post(
+            "/v1/target-systems", json={"name": "Missing", "kind": "not-installed"}
+        )
 
+    assert {item["id"] for item in modules.json()} == {"filesystem", "http"}
+    assert all(item["licensed"] for item in modules.json())
     assert initial.json()[0]["kind"] == "filesystem"
     assert created.status_code == 201
     assert target["has_bearer_token"] is True
     assert "bearer_token" not in target
     assert all("bearer_token" not in item for item in listing.json())
     assert delete_default.status_code == 409
+    assert uninstalled.status_code == 422
+    assert "nicht installiert" in uninstalled.json()["detail"]
 
 
 def test_http_target_requires_valid_endpoint(tmp_path: Path, monkeypatch):

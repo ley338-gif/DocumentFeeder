@@ -29,6 +29,7 @@ Ziel: synthetisches Textdokument Ende-zu-Ende vom Eingang zum Dateisystem-Connec
 - providerneutrale Malware-Prüfung und ClamAV-Streaming-Adapter (umgesetzt)
 - produktiver ClamAV-Betrieb mit Signaturupdates und Monitoring
 - Observability und Betriebsmetriken
+- Admin-Systemstatus mit Worker-Heartbeats, Queue- und Integrationszuständen (MVP umgesetzt)
 
 ## M3 – KI-Dokumenttyp-Vorschläge (v0.3)
 

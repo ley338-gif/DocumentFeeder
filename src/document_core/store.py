@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
-from sqlalchemy import JSON, DateTime, Integer, String, Text, and_, create_engine, delete, or_, select, update
+from sqlalchemy import JSON, DateTime, Integer, String, Text, and_, create_engine, delete, or_, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -171,6 +171,21 @@ class AuditEventRow(Base):
     status_code: Mapped[int] = mapped_column(Integer, nullable=False)
     details: Mapped[dict] = mapped_column(JSON, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+
+
+class WorkerHeartbeatRow(Base):
+    __tablename__ = "worker_heartbeats"
+    worker_id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    current_job_id: Mapped[str | None] = mapped_column(String(36))
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+
+
+class SystemSettingRow(Base):
+    __tablename__ = "system_settings"
+    key: Mapped[str] = mapped_column(String(100), primary_key=True)
+    value: Mapped[str] = mapped_column(Text, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class JobStore:
@@ -508,6 +523,52 @@ class JobStore:
                     "resource_id", "outcome", "status_code", "details", "created_at",
                 )
             }) for row in rows]
+
+    def heartbeat_worker(self, worker_id: str, current_job_id: str | None = None) -> None:
+        now = datetime.now(UTC)
+        with self.sessions.begin() as session:
+            row = session.get(WorkerHeartbeatRow, worker_id)
+            if row is None:
+                session.add(WorkerHeartbeatRow(
+                    worker_id=worker_id, current_job_id=current_job_id,
+                    started_at=now, last_seen_at=now,
+                ))
+            else:
+                row.current_job_id = current_job_id
+                row.last_seen_at = now
+
+    def list_worker_heartbeats(self) -> list[dict]:
+        with self.sessions() as session:
+            rows = session.scalars(
+                select(WorkerHeartbeatRow).order_by(WorkerHeartbeatRow.last_seen_at.desc())
+            ).all()
+            return [{
+                "worker_id": row.worker_id,
+                "current_job_id": row.current_job_id,
+                "started_at": row.started_at,
+                "last_seen_at": row.last_seen_at,
+            } for row in rows]
+
+    def get_system_setting(self, key: str, default: str | None = None) -> str | None:
+        with self.sessions() as session:
+            row = session.get(SystemSettingRow, key)
+            return row.value if row else default
+
+    def set_system_setting(self, key: str, value: str) -> None:
+        with self.sessions.begin() as session:
+            row = session.get(SystemSettingRow, key)
+            if row is None:
+                session.add(SystemSettingRow(key=key, value=value, updated_at=datetime.now(UTC)))
+            else:
+                row.value = value
+                row.updated_at = datetime.now(UTC)
+
+    def schema_version(self) -> str:
+        try:
+            with self.engine.connect() as connection:
+                return str(connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one())
+        except Exception:
+            return "unbekannt"
 
     def healthcheck(self) -> bool:
         try:

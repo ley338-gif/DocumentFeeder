@@ -9,7 +9,7 @@ from pathlib import Path
 from string import Formatter
 from urllib.parse import urlparse
 
-from fastapi import FastAPI, File, HTTPException, Query, Request, Response, UploadFile
+from fastapi import Body, FastAPI, File, HTTPException, Query, Request, Response, UploadFile
 from fastapi.responses import JSONResponse
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -73,6 +73,9 @@ async def watch_hotfolder() -> None:
                         channel.last_ingested_at = datetime.now(UTC)
                         channel.last_error = None
                         store.save_channel(channel)
+                if channel.last_error is not None:
+                    channel.last_error = None
+                    store.save_channel(channel)
             except Exception as exc:
                 channel.last_error = str(exc)
                 store.save_channel(channel)
@@ -143,7 +146,7 @@ async def authorize(request: Request, call_next):
         csrf_header = request.headers.get("X-CSRF-Token")
         if not csrf_cookie or not csrf_header or not hmac.compare_digest(csrf_cookie, csrf_header):
             return JSONResponse({"detail": "Ungültiger CSRF-Schutz"}, status_code=403)
-    if path.startswith(("/v1/users", "/v1/audit-events")) and user.role != UserRole.ADMIN:
+    if path.startswith(("/v1/users", "/v1/audit-events", "/v1/system-status")) and user.role != UserRole.ADMIN:
         return JSONResponse({"detail": "Administratorrechte erforderlich"}, status_code=403)
     configuration = ("/v1/input-channels", "/v1/target-systems", "/v1/delivery-rules")
     if path.startswith(configuration) and not safe_method and user.role != UserRole.ADMIN:
@@ -292,6 +295,82 @@ def list_audit_events(
     return AuditListResponse(
         items=events[offset:offset + limit], total=len(events), limit=limit, offset=offset
     )
+
+
+@app.get("/v1/system-status")
+def system_status() -> dict:
+    now = datetime.now(UTC)
+    jobs = store.list()
+    channels = store.list_channels()
+    targets = store.list_target_systems()
+    stale_after = max(10.0, settings.worker_poll_interval * 3 + 5)
+
+    def aware(value: datetime) -> datetime:
+        return value if value.tzinfo else value.replace(tzinfo=UTC)
+
+    workers = []
+    for item in store.list_worker_heartbeats():
+        age = (now - aware(item["last_seen_at"])).total_seconds()
+        workers.append({**item, "status": "ok" if age <= stale_after else "stale"})
+    active_workers = [item for item in workers if item["status"] == "ok"]
+    waiting = [job for job in jobs if job.status == JobStatus.RECEIVED]
+    delivered = [job for job in jobs if job.status == JobStatus.DELIVERED]
+    scanner_configured = settings.malware_scanner != "disabled"
+    scanning_enabled = scanner_configured and (
+        store.get_system_setting("malware_scanning_enabled", "true") == "true"
+    )
+    malware = pipeline.malware_scanner.healthcheck() if scanning_enabled else {
+        "status": "paused", "engine": settings.malware_scanner
+    }
+    malware.update({"enabled": scanning_enabled, "controllable": scanner_configured})
+    database_ok = store.healthcheck()
+    target_errors = [target for target in targets if target.last_error]
+    channel_errors = [channel for channel in channels if channel.last_error]
+    status = "ok"
+    if not database_ok or not active_workers or malware["status"] == "error":
+        status = "error"
+    elif (
+        target_errors or channel_errors or (scanner_configured and not scanning_enabled)
+        or any(job.status == JobStatus.FAILED for job in jobs)
+    ):
+        status = "warning"
+    return {
+        "status": status,
+        "generated_at": now,
+        "version": app.version,
+        "schema_version": store.schema_version(),
+        "services": {
+            "api": {"status": "ok"},
+            "database": {"status": "ok" if database_ok else "error"},
+            "malware_scanner": malware,
+        },
+        "queue": {
+            "waiting": len(waiting),
+            "processing": sum(job.status == JobStatus.PROCESSING for job in jobs),
+            "scheduled_retries": sum(job.next_attempt_at is not None for job in jobs),
+            "failed": sum(job.status == JobStatus.FAILED for job in jobs),
+            "quarantined": sum(job.status == JobStatus.QUARANTINED for job in jobs),
+            "oldest_waiting_at": min((job.created_at for job in waiting), default=None),
+            "last_delivered_at": max((job.updated_at for job in delivered), default=None),
+        },
+        "workers": workers,
+        "channels": {
+            "total": len(channels), "enabled": sum(channel.enabled for channel in channels),
+            "errors": len(channel_errors),
+        },
+        "targets": {
+            "total": len(targets), "enabled": sum(target.enabled for target in targets),
+            "errors": len(target_errors),
+        },
+    }
+
+
+@app.post("/v1/system-status/malware-scanner")
+def control_malware_scanner(enabled: bool = Body(embed=True)) -> dict:
+    if settings.malware_scanner == "disabled" and enabled:
+        raise HTTPException(status_code=409, detail="Kein Malware-Scanner konfiguriert")
+    store.set_system_setting("malware_scanning_enabled", "true" if enabled else "false")
+    return {"enabled": enabled, "status": "enabled" if enabled else "paused"}
 
 
 @app.get("/", include_in_schema=False)

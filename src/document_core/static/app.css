@@ -264,6 +264,13 @@ body.viewer-mode .upload-button { display: none; }
 .audit-row { display: grid; grid-template-columns: 10px minmax(180px,1.2fr) minmax(180px,1fr) 90px 150px; align-items: center; gap: 12px; padding: 12px 15px; border-bottom: 1px solid var(--line); }
 .audit-row > div { min-width: 0; }.audit-row strong, .audit-row span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.audit-row strong { font-size: 12px; }.audit-row div span, .audit-row time { color: var(--muted); font-size: 11px; }
 .audit-status { width: 7px; height: 7px; border-radius: 50%; background: #5e6ad2; }.audit-status.failure { background: var(--red); }
+.system-summary { display: grid; grid-template-columns: repeat(6, minmax(0,1fr)); gap: 9px; margin-bottom: 14px; }.system-card { padding: 15px; border: 1px solid var(--line); border-radius: 9px; background: white; box-shadow: var(--shadow); }.system-card span { display: block; color: var(--muted); font-size: 11px; }.system-card strong { display: block; margin-top: 8px; font-size: 21px; }.system-card.error { border-color: #e4aaaa; }.system-card.warning { border-color: #e5ca99; }
+.system-details { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }.system-lines { padding: 4px 14px 12px; }.system-line { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 0; border-bottom: 1px solid var(--line); }.system-line:last-child { border: 0; }.system-line > span:first-child { color: var(--muted); text-transform: capitalize; }
+.worker-identity { display: grid; gap: 3px; min-width: 0; }
+.worker-identity strong { color: var(--ink); text-transform: none; }
+.worker-identity small { color: var(--muted); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; overflow-wrap: anywhere; text-transform: none; }
+.system-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+@media (max-width: 1100px) { .system-summary { grid-template-columns: repeat(3,1fr); } }
 
 main { max-width: none; margin: 0 0 0 232px; padding: 34px 42px 56px; }
 .hero { align-items: center; margin-bottom: 24px; }

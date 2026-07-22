@@ -51,6 +51,11 @@ def test_admin_can_login_and_manage_users(tmp_path: Path, monkeypatch):
         )
         users = client.get("/v1/users")
         audit = client.get("/v1/audit-events")
+        api_module.store.heartbeat_worker("test-worker")
+        system = client.get("/v1/system-status")
+        scanner_control = client.post(
+            "/v1/system-status/malware-scanner", json={"enabled": False}
+        )
 
     assert login.status_code == 200
     assert login.json()["role"] == "admin"
@@ -62,6 +67,12 @@ def test_admin_can_login_and_manage_users(tmp_path: Path, monkeypatch):
         "LOGIN",
         "POST /v1/users",
     }
+    assert system.status_code == 200
+    assert system.json()["status"] == "ok"
+    assert system.json()["schema_version"] == "unbekannt"
+    assert system.json()["workers"][0]["worker_id"] == "test-worker"
+    assert scanner_control.status_code == 200
+    assert scanner_control.json() == {"enabled": False, "status": "paused"}
 
 
 def test_viewer_has_read_only_access_and_no_user_management(tmp_path: Path, monkeypatch):
@@ -78,6 +89,10 @@ def test_viewer_has_read_only_access_and_no_user_management(tmp_path: Path, monk
         enable_csrf(viewer)
         assert viewer.get("/v1/jobs").status_code == 200
         assert viewer.get("/v1/users").status_code == 403
+        assert viewer.get("/v1/system-status").status_code == 403
+        assert viewer.post(
+            "/v1/system-status/malware-scanner", json={"enabled": False}
+        ).status_code == 403
         assert viewer.get("/v1/input-channels").status_code == 200
         channel_id = viewer.get("/v1/input-channels").json()[0]["id"]
         assert viewer.patch(

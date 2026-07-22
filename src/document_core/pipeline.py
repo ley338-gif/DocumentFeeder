@@ -8,7 +8,7 @@ from pathlib import Path
 from .config import Settings
 from .connectors import FilesystemConnector, HttpConnector, TargetConnector
 from .file_validation import FileTooLargeError, detect_and_validate_type
-from .malware import MalwareScanner, create_malware_scanner
+from .malware import MalwareScanner, MalwareScanResult, create_malware_scanner
 from .models import DocumentJob, JobEvent, JobStatus, ReviewEvent, ReviewRequest
 from .processing import (
     DefaultDocumentExtractor,
@@ -57,7 +57,14 @@ class DocumentPipeline:
         staged_path, content_hash, size = self._stage_and_hash(source_path)
         try:
             content_type = detect_and_validate_type(staged_path, filename)
-            malware_scan = self.malware_scanner.scan(staged_path)
+            scanning_enabled = getattr(self.store, "get_system_setting", lambda _key, default: default)(
+                "malware_scanning_enabled", "true"
+            ) == "true"
+            malware_scan = (
+                self.malware_scanner.scan(staged_path)
+                if scanning_enabled
+                else MalwareScanResult(status="paused", engine="operator")
+            )
             existing = self.store.find_by_hash(content_hash)
             if existing is not None:
                 self._record_duplicate(existing, source, filename)

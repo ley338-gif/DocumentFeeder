@@ -8,12 +8,13 @@ die dokumentierte `/v1`-API.
 
 Die Hauptnavigation folgt dem Arbeitsablauf:
 
-- **Übersicht** zeigt alle aktuellen Dokumente und Statuszahlen.
+- **Übersicht** zeigt alle Dokumente und Statuszahlen.
 - **Prüfen** öffnet direkt die Queue der fachlich unklaren Dokumente.
-- **Dokumente** dient als vollständiges Archiv.
+- **Eingegangen**, **In Verarbeitung**, **In Zustellung**, **Zugestellt** und
+  **Fehlgeschlagen** öffnen die jeweilige Workflow-Queue direkt.
 - **Automatisierung** verwaltet dokumenttypabhängige Ablageregeln.
 - Die Navigation ist in **Workflow** und **Konfiguration** gegliedert. Workflow enthält
-  Übersicht, Prüfung und Dokumente. Unterhalb einer Trennlinie bündelt Konfiguration die
+  Übersicht, Prüfung und alle Status-Queues. Unterhalb einer Trennlinie bündelt Konfiguration die
   Bereiche Automatisierung, Eingangskanäle und Zielsysteme. Jeder Bereich besitzt einen
   gleichwertigen aktiven Zustand; es gibt keinen scheinbar deaktivierten Oberpunkt.
 

@@ -22,6 +22,7 @@ def lease_heartbeat(store: JobStore, job_id: str, worker_id: str, lease_seconds:
     def renew() -> None:
         interval = max(1.0, lease_seconds / 3)
         while not stopped.wait(interval):
+            store.heartbeat_worker(worker_id, job_id)
             if not store.renew_lease(job_id, worker_id, lease_seconds):
                 logger.warning("Lease for job %s could not be renewed", job_id)
                 return
@@ -44,14 +45,17 @@ def run() -> None:
     logger.info("Worker %s started", worker_id)
 
     while True:
+        store.heartbeat_worker(worker_id)
         job = store.claim_next(worker_id, settings.worker_lease_seconds)
         if job is None:
             time.sleep(settings.worker_poll_interval)
             continue
         logger.info("Processing job %s, attempt %s", job.id, job.attempt_count)
+        store.heartbeat_worker(worker_id, job.id)
         with lease_heartbeat(store, job.id, worker_id, settings.worker_lease_seconds):
             result = pipeline.process(job)
         logger.info("Job %s finished with status %s", result.id, result.status)
+        store.heartbeat_worker(worker_id)
 
 
 if __name__ == "__main__":

@@ -62,6 +62,12 @@ oder `415` (nicht unterstützt/Endung passt nicht). Abgewiesene Dateien erzeugen
 
 Mit `DOCUMENT_CORE_MALWARE_SCANNER=clamav` streamt Document Core die Staging-Datei über das
 ClamAV-`INSTREAM`-Protokoll, ohne einen zusätzlichen vollständigen Datei-Buffer anzulegen.
+Administratoren können die Prüfung unter **Administration → Systemstatus** pausieren und wieder
+aktivieren. Diese Einstellung gilt durch die gemeinsame Datenbank sofort für API und Worker. Der
+ClamAV-Container selbst wird bewusst weiterhin durch Docker Compose verwaltet; die Webanwendung
+erhält keinen Zugriff auf den sicherheitskritischen Docker-Socket.
+Während einer Pause werden neue Dokumente mit dem Prüfstatus `paused` angenommen. Die Pause ist
+daher nur für Wartungsfenster vorgesehen und wird im Systemstatus als Warnung ausgewiesen.
 Nur die Antwort `OK` wird akzeptiert. Ein Fund liefert HTTP `422`; ein nicht erreichbarer
 oder unerwartet antwortender Scanner liefert `503`. In beiden Fällen entstehen weder Job
 noch dauerhafte Inbox-Datei. Im Hotfolder bleibt die Quelldatei liegen und `last_error`
@@ -180,6 +186,12 @@ Bereich, optionale Objekt-ID und HTTP-Ergebnis. Passwörter, Tokens, Request-Inh
 Dokumenttexte werden nicht protokolliert. Suche und Ergebnisfilter arbeiten auf der
 persistenten Audit-Tabelle `audit_events`. Export, Aufbewahrungsfristen und technischer
 Manipulationsschutz bleiben ein nachgelagerter Produktionsschritt.
+
+Unter **Administration → Systemstatus** stehen der Zustand von API, Datenbank und
+Malware-Scanner, persistente Worker-Heartbeats, Queue-Größen, Retries, Fehler, offene
+Prüfungen, ältester wartender Job, letzte Zustellung sowie Kanal-, Ziel-, Versions- und
+Migrationsinformationen. Ein Worker gilt nur dann als aktiv, wenn sein Heartbeat innerhalb
+des aus dem Polling-Intervall berechneten Zeitfensters liegt.
 
 - TLS, Authentisierung und rollenbasierte Autorisierung ergänzen.
 - Datenbank, Backups und Datenträger verschlüsseln.

@@ -17,8 +17,12 @@
       <div class="nav-section" aria-label="Workflow">
         <span class="nav-section-label">Workflow</span>
         <button class="nav-button active" data-view="documents" data-status="" type="button">Übersicht</button>
+        <button class="nav-button" data-view="documents" data-status="received" type="button">Eingegangen</button>
+        <button class="nav-button" data-view="documents" data-status="processing" type="button">In Verarbeitung</button>
         <button class="nav-button" data-view="documents" data-status="quarantined" type="button">Prüfen</button>
-        <button class="nav-button" data-view="documents" data-status="all" type="button">Dokumente</button>
+        <button class="nav-button" data-view="documents" data-status="failed" type="button">Fehlgeschlagen</button>
+        <button class="nav-button" data-view="documents" data-status="delivering" type="button">In Zustellung</button>
+        <button class="nav-button" data-view="documents" data-status="delivered" type="button">Zugestellt</button>        
       </div>
       <div class="nav-section nav-section-separated" aria-label="Konfiguration">
         <span class="nav-section-label">Konfiguration</span>
@@ -30,6 +34,7 @@
         <span class="nav-section-label">Administration</span>
         <button class="nav-button" data-view="users" type="button">Benutzerverwaltung</button>
         <button class="nav-button" data-view="audit" type="button">Systemprotokoll</button>
+        <button class="nav-button" data-view="system" type="button">Systemstatus</button>
       </div>
     </nav>
     <div class="sidebar-footer">
@@ -210,6 +215,11 @@
     <div id="audit-view" class="hidden">
       <section class="hero channel-hero"><div><p class="eyebrow">Administration</p><h1>Systemprotokoll</h1><p class="hero-copy">Anmeldungen und Änderungen übergreifend nachvollziehen.</p></div></section>
       <section class="audit-panel"><div class="toolbar audit-toolbar"><label class="search"><span class="sr-only">Protokoll durchsuchen</span><input id="audit-search" type="search" placeholder="Benutzer, Aktion oder Objekt"></label><select id="audit-outcome"><option value="">Alle Ergebnisse</option><option value="success">Erfolgreich</option><option value="failure">Fehlgeschlagen</option></select><button id="reload-audit" class="icon-button" type="button">↻</button></div><div id="audit-list" class="audit-list"></div><div id="audit-page-info" class="pagination"></div></section>
+    </div>
+
+    <div id="system-view" class="hidden">
+      <section class="hero channel-hero"><div><p class="eyebrow">Administration</p><h1>Systemstatus</h1><p class="hero-copy">Dienste, Verarbeitung und Integrationen auf einen Blick.</p></div><button id="reload-system" class="button" type="button">Status aktualisieren</button></section>
+      <section><div id="system-summary" class="system-summary"></div><div id="system-details" class="system-details"></div></section>
     </div>
   </main>
 

@@ -335,6 +335,7 @@ function switchView(view, sourceButton = null) {
   $("#automation-view").classList.toggle("hidden", view !== "automation");
   $("#users-view").classList.toggle("hidden", view !== "users");
   $("#audit-view").classList.toggle("hidden", view !== "audit");
+  $("#system-view").classList.toggle("hidden", view !== "system");
   if (sourceButton) {
     document.querySelectorAll(".nav-button").forEach(button => button.classList.toggle("active", button === sourceButton));
   }
@@ -348,6 +349,41 @@ function switchView(view, sourceButton = null) {
   if (view === "automation") loadRules();
   if (view === "users") loadUsers();
   if (view === "audit") loadAuditEvents();
+  if (view === "system") loadSystemStatus();
+}
+
+function statusLabel(status) { return status === "ok" ? "Bereit" : status === "disabled" ? "Deaktiviert" : status === "paused" ? "Pausiert" : status === "stale" ? "Veraltet" : status === "warning" ? "Warnung" : "Fehler"; }
+
+async function loadSystemStatus() {
+  try {
+    const result = await api("/v1/system-status"); const queue = result.queue;
+    const cards = [
+      ["Gesamtstatus", statusLabel(result.status), result.status],
+      ["Wartend", queue.waiting, queue.waiting ? "warning" : "ok"],
+      ["In Verarbeitung", queue.processing, "ok"],
+      ["Fehlgeschlagen", queue.failed, queue.failed ? "error" : "ok"],
+      ["Zu prüfen", queue.quarantined, queue.quarantined ? "warning" : "ok"],
+      ["Aktive Worker", result.workers.filter(worker => worker.status === "ok").length, result.workers.some(worker => worker.status === "ok") ? "ok" : "error"]
+    ];
+    $("#system-summary").innerHTML = cards.map(card => `<article class="system-card ${card[2]}"><span>${card[0]}</span><strong>${card[1]}</strong></article>`).join("");
+    const serviceNames = {api: "API", database: "Datenbank", malware_scanner: "Malware-Schutz"};
+    const services = Object.entries(result.services).map(([name, service]) => {
+      const badge = `<span class="badge ${service.status === "ok" ? "delivered" : ["disabled", "paused"].includes(service.status) ? "received" : "failed"}">${statusLabel(service.status)}</span>`;
+      const control = name === "malware_scanner" && service.controllable ? `<button id="toggle-malware" class="button" data-enabled="${service.enabled}" type="button">${service.enabled ? "Prüfung pausieren" : "Prüfung aktivieren"}</button>` : "";
+      return `<div class="system-line"><span>${serviceNames[name] || esc(name.replaceAll("_", " "))}</span><span class="system-actions">${badge}${control}</span></div>`;
+    }).join("");
+    const workers = result.workers.length ? result.workers.map((worker, index) => `<div class="system-line"><span class="worker-identity"><strong>Dokumentenverarbeitung ${index + 1}</strong><small>${esc(worker.worker_id)}${worker.current_job_id ? ` · Job ${esc(worker.current_job_id)}` : ""}</small></span><span class="badge ${worker.status === "ok" ? "delivered" : "failed"}">${statusLabel(worker.status)}</span></div>`).join("") : '<div class="empty-list">Kein Worker-Heartbeat vorhanden</div>';
+    $("#system-details").innerHTML = `<article class="panel"><div class="panel-header"><h3>Dienste</h3></div><div class="system-lines">${services}</div></article><article class="panel"><div class="panel-header"><h3>Worker</h3></div><div class="system-lines">${workers}</div></article><article class="panel"><div class="panel-header"><h3>Integrationen</h3></div><div class="system-lines"><div class="system-line"><span>Eingangskanäle</span><strong>${result.channels.enabled}/${result.channels.total} aktiv · ${result.channels.errors} Fehler</strong></div><div class="system-line"><span>Zielsysteme</span><strong>${result.targets.enabled}/${result.targets.total} aktiv · ${result.targets.errors} Fehler</strong></div></div></article><article class="panel"><div class="panel-header"><h3>Version</h3></div><div class="system-lines"><div class="system-line"><span>Document Core</span><strong>${esc(result.version)}</strong></div><div class="system-line"><span>Datenbankschema</span><strong>${esc(result.schema_version)}</strong></div><div class="system-line"><span>Ältester wartender Job</span><strong>${formatTime(queue.oldest_waiting_at)}</strong></div><div class="system-line"><span>Letzte Zustellung</span><strong>${formatTime(queue.last_delivered_at)}</strong></div></div></article>`;
+    $("#toggle-malware")?.addEventListener("click", async event => {
+      const enabled = event.currentTarget.dataset.enabled !== "true";
+      if (!enabled && !window.confirm("Malware-Prüfung wirklich pausieren? Neue Dokumente werden dann ungeprüft angenommen.")) return;
+      try {
+        await api("/v1/system-status/malware-scanner", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({enabled})});
+        toast(enabled ? "Malware-Prüfung aktiviert" : "Malware-Prüfung pausiert");
+        await loadSystemStatus();
+      } catch (error) { toast(error.message, true); }
+    });
+  } catch (error) { toast(error.message, true); }
 }
 
 async function loadAuditEvents() {
@@ -617,6 +653,7 @@ $("#rule-form").addEventListener("submit", createRule);
 $("#user-form").addEventListener("submit", createUser);
 $("#reload-users").addEventListener("click", loadUsers);
 $("#reload-audit").addEventListener("click", loadAuditEvents);
+$("#reload-system").addEventListener("click", loadSystemStatus);
 $("#audit-outcome").addEventListener("change", loadAuditEvents);
 $("#audit-search").addEventListener("input", event => { window.clearTimeout(state.auditTimer); state.auditTimer = window.setTimeout(loadAuditEvents, 250); });
 $("#login-form").addEventListener("submit", login);

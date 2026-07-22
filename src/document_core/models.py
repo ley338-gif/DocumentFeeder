@@ -16,6 +16,54 @@ class JobStatus(StrEnum):
     FAILED = "failed"
 
 
+class UserRole(StrEnum):
+    ADMIN = "admin"
+    OPERATOR = "operator"
+    VIEWER = "viewer"
+
+
+class UserAccount(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    username: str = Field(min_length=3, max_length=100)
+    display_name: str = Field(min_length=1, max_length=200)
+    role: UserRole = UserRole.VIEWER
+    active: bool = True
+    password_hash: str = Field(exclude=True, repr=False)
+    last_login_at: datetime | None = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class UserView(BaseModel):
+    id: str
+    username: str
+    display_name: str
+    role: UserRole
+    active: bool
+    last_login_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class UserCreate(BaseModel):
+    username: str = Field(min_length=3, max_length=100, pattern=r"^[a-zA-Z0-9._-]+$")
+    display_name: str = Field(min_length=1, max_length=200)
+    role: UserRole
+    password: str = Field(min_length=12, max_length=200)
+
+
+class UserUpdate(BaseModel):
+    display_name: str | None = Field(default=None, min_length=1, max_length=200)
+    role: UserRole | None = None
+    active: bool | None = None
+    password: str | None = Field(default=None, min_length=12, max_length=200)
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
 class RoutingReference(BaseModel):
     namespace: str = Field(min_length=1, max_length=100)
     type: str = Field(min_length=1, max_length=100)

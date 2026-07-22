@@ -8,7 +8,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from .models import DeliveryRule, DocumentJob, InputChannel, JobEvent, JobStatus, TargetSystem
+from .models import (
+    DeliveryRule, DocumentJob, InputChannel, JobEvent, JobStatus, TargetSystem,
+    UserAccount,
+)
 
 
 class JobRepository(Protocol):
@@ -134,6 +137,26 @@ class JobEventRow(Base):
     details: Mapped[dict] = mapped_column(JSON, nullable=False)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class UserRow(Base):
+    __tablename__ = "users"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    username: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, index=True)
+    display_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    role: Mapped[str] = mapped_column(String(32), nullable=False)
+    active: Mapped[bool] = mapped_column(nullable=False)
+    password_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class SessionRow(Base):
+    __tablename__ = "user_sessions"
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class JobStore:
@@ -379,6 +402,59 @@ class JobStore:
                 )
             ).all()
             return [self._event_model(row) for row in rows]
+
+    @staticmethod
+    def _user_model(row: UserRow) -> UserAccount:
+        return UserAccount.model_validate({key: getattr(row, key) for key in (
+            "id", "username", "display_name", "role", "active", "password_hash",
+            "last_login_at", "created_at", "updated_at",
+        )})
+
+    def list_users(self) -> list[UserAccount]:
+        with self.sessions() as session:
+            rows = session.scalars(select(UserRow).order_by(UserRow.username)).all()
+            return [self._user_model(row) for row in rows]
+
+    def get_user(self, user_id: str) -> UserAccount | None:
+        with self.sessions() as session:
+            row = session.get(UserRow, user_id)
+            return self._user_model(row) if row else None
+
+    def get_user_by_username(self, username: str) -> UserAccount | None:
+        with self.sessions() as session:
+            row = session.scalar(select(UserRow).where(UserRow.username == username.lower()))
+            return self._user_model(row) if row else None
+
+    def save_user(self, user: UserAccount) -> UserAccount:
+        user.username = user.username.lower()
+        user.updated_at = datetime.now(UTC)
+        values = user.model_dump()
+        values["password_hash"] = user.password_hash
+        with self.sessions.begin() as session:
+            row = session.get(UserRow, user.id)
+            if row is None:
+                session.add(UserRow(**values))
+            else:
+                for key, value in values.items():
+                    setattr(row, key, value)
+        return user
+
+    def create_session(self, token_hash: str, user_id: str, expires_at: datetime) -> None:
+        with self.sessions.begin() as session:
+            session.add(SessionRow(token_hash=token_hash, user_id=user_id, expires_at=expires_at))
+
+    def get_session_user(self, token_hash: str) -> UserAccount | None:
+        now = datetime.now(UTC)
+        with self.sessions() as session:
+            row = session.get(SessionRow, token_hash)
+            if row is None or row.expires_at.replace(tzinfo=UTC) <= now:
+                return None
+            user = session.get(UserRow, row.user_id)
+            return self._user_model(user) if user and user.active else None
+
+    def delete_session(self, token_hash: str) -> None:
+        with self.sessions.begin() as session:
+            session.execute(delete(SessionRow).where(SessionRow.token_hash == token_hash))
 
     def healthcheck(self) -> bool:
         try:

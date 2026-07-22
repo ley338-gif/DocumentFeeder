@@ -1,7 +1,7 @@
 const state = {
   jobs: [], total: 0, limit: 20, offset: 0, selectedId: null,
   selectedUpdatedAt: null, selectedStatus: null, reviewDirty: false, targets: [],
-  jobsSignature: null, statsSignature: null, status: "", query: ""
+  jobsSignature: null, statsSignature: null, status: "", query: "", currentUser: null
 };
 const labels = {
   received: "Eingegangen", processing: "In Verarbeitung", quarantined: "Zu prüfen",
@@ -326,6 +326,7 @@ function switchView(view, sourceButton = null) {
   $("#channels-view").classList.toggle("hidden", view !== "channels");
   $("#targets-view").classList.toggle("hidden", view !== "targets");
   $("#automation-view").classList.toggle("hidden", view !== "automation");
+  $("#users-view").classList.toggle("hidden", view !== "users");
   if (sourceButton) {
     document.querySelectorAll(".nav-button").forEach(button => button.classList.toggle("active", button === sourceButton));
   }
@@ -337,6 +338,34 @@ function switchView(view, sourceButton = null) {
   if (view === "channels") loadChannels();
   if (view === "targets") loadTargets();
   if (view === "automation") loadRules();
+  if (view === "users") loadUsers();
+}
+
+async function loadUsers() {
+  const users = await api("/v1/users");
+  $("#user-list").innerHTML = users.map(user => `<article class="channel-card"><div><div class="job-title"><span class="badge ${user.active ? "delivered" : "received"}">${user.active ? "Aktiv" : "Deaktiviert"}</span><h3>${esc(user.display_name)}</h3></div><span class="channel-path">${esc(user.username)}</span><div class="channel-details"><span>Rolle <strong>${esc(user.role)}</strong></span><span>Letzte Anmeldung <strong>${formatTime(user.last_login_at)}</strong></span></div></div><div class="channel-actions"><select class="user-role" data-id="${user.id}"><option value="viewer" ${user.role === "viewer" ? "selected" : ""}>Betrachter</option><option value="operator" ${user.role === "operator" ? "selected" : ""}>Operator</option><option value="admin" ${user.role === "admin" ? "selected" : ""}>Admin</option></select><button class="button user-password" data-id="${user.id}">Passwort zurücksetzen</button><button class="button user-toggle" data-id="${user.id}" data-active="${user.active}">${user.active ? "Deaktivieren" : "Aktivieren"}</button></div></article>`).join("");
+  document.querySelectorAll(".user-role").forEach(element => element.addEventListener("change", () => updateUser(element.dataset.id, {role: element.value})));
+  document.querySelectorAll(".user-toggle").forEach(button => button.addEventListener("click", () => updateUser(button.dataset.id, {active: button.dataset.active !== "true"})));
+  document.querySelectorAll(".user-password").forEach(button => button.addEventListener("click", () => resetPassword(button.dataset.id)));
+}
+
+async function updateUser(id, body) { try { await api(`/v1/users/${id}`, {method:"PATCH", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)}); toast("Benutzer aktualisiert"); await loadUsers(); } catch (error) { toast(error.message, true); } }
+async function resetPassword(id) { const password = window.prompt("Neues Passwort (mindestens 12 Zeichen)"); if (!password) return; await updateUser(id, {password}); }
+async function createUser(event) { event.preventDefault(); const form = new FormData(event.currentTarget); try { await api("/v1/users", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(Object.fromEntries(form))}); event.currentTarget.reset(); toast("Benutzer angelegt"); await loadUsers(); } catch (error) { toast(error.message, true); } }
+
+async function initializeSession() {
+  try {
+    state.currentUser = await api("/v1/auth/me");
+    $("#login-screen").classList.add("hidden");
+    if (state.currentUser.role === "admin") $("#admin-nav").classList.remove("hidden");
+    loadTargets(); updatePathPreview(); refreshAll();
+  } catch (_) { $("#login-screen").classList.remove("hidden"); }
+}
+
+async function login(event) {
+  event.preventDefault(); const form = new FormData(event.currentTarget);
+  try { await api("/v1/auth/login", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(Object.fromEntries(form))}); $("#login-error").classList.add("hidden"); await initializeSession(); }
+  catch (error) { $("#login-error").textContent = error.message; $("#login-error").classList.remove("hidden"); }
 }
 
 async function loadTargets() {
@@ -537,13 +566,15 @@ $("#reload-channels").addEventListener("click", loadChannels);
 $("#target-form").addEventListener("submit", createTarget);
 $("#reload-targets").addEventListener("click", loadTargets);
 $("#rule-form").addEventListener("submit", createRule);
+$("#user-form").addEventListener("submit", createUser);
+$("#reload-users").addEventListener("click", loadUsers);
+$("#login-form").addEventListener("submit", login);
 $("#reload-rules").addEventListener("click", loadRules);
 $("#rule-path-template").addEventListener("input", updatePathPreview);
 document.querySelectorAll(".template-chips button").forEach(button => button.addEventListener("click", () => insertPathPlaceholder(button)));
-loadTargets();
-updatePathPreview();
-refreshAll();
+initializeSession();
 window.setInterval(async () => {
+  if (!state.currentUser) return;
   await refreshAll();
   if (state.selectedId && ["received", "processing", "delivering"].includes(state.selectedStatus)) {
     try {

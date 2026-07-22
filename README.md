@@ -62,6 +62,11 @@ zusammenpassen. Konfigurierbare Limits begrenzen Dateigröße, PDF-Seiten, Bildp
 OCR-Laufzeit; abgewiesene Dateien erzeugen keinen Job und keine Inbox-Arbeitskopie.
 Optional kann dieselbe Eingangsstufe Dateien über einen ClamAV-Dienst prüfen. Der Scanner
 ist standardmäßig deaktiviert und wird über `DOCUMENT_CORE_MALWARE_SCANNER=clamav` aktiviert.
+
+Die Operator-Konsole ist durch Anmeldung und die Rollen `admin`, `operator` und `viewer`
+geschützt. Admins erhalten den Navigationsbereich **Administration** mit der
+**Benutzerverwaltung**. Der erste Admin wird beim leeren System aus den Bootstrap-Variablen
+erzeugt; das Bootstrap-Passwort muss vor einem produktiven Start geändert werden.
 Hash und Arbeitskopie entstehen in einem blockweisen Durchlauf über eine kurzlebige
 Staging-Datei. Dadurch wird die Dateigröße nicht vollständig im Arbeitsspeicher gehalten.
 

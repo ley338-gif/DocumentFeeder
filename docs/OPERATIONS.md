@@ -155,6 +155,19 @@ und darf nur für einen bewusst bestätigten Entwicklungsreset verwendet werden.
 
 ## Sicherheit vor Produktivbetrieb
 
+### Anmeldung und Benutzer
+
+`DOCUMENT_CORE_AUTH_ENABLED=true` schützt UI und API durch eine HttpOnly-Sitzung. Beim ersten
+Start einer leeren Datenbank wird der Admin aus `DOCUMENT_CORE_BOOTSTRAP_ADMIN_USERNAME` und
+`DOCUMENT_CORE_BOOTSTRAP_ADMIN_PASSWORD` erzeugt. Das Beispielpasswort darf nicht produktiv
+verwendet werden. Admins verwalten Benutzer, Rollen, Aktivstatus und Passwörter unter
+**Administration → Benutzerverwaltung**. Viewer dürfen ausschließlich lesen; Operatoren
+dürfen Dokumente bearbeiten, aber keine Benutzer-, Kanal-, Ziel- oder Regelkonfiguration
+ändern. Sitzungen laufen nach `DOCUMENT_CORE_SESSION_TTL_HOURS` ab.
+
+Für einen TLS-Betrieb muss das Session-Cookie im nächsten Härtungsschritt zusätzlich als
+`Secure` konfiguriert und ein expliziter CSRF-Schutz ergänzt werden.
+
 - TLS, Authentisierung und rollenbasierte Autorisierung ergänzen.
 - Datenbank, Backups und Datenträger verschlüsseln.
 - Inhalte und personenbezogene Metadaten niemals in Standardlogs schreiben.

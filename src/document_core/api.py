@@ -1,18 +1,21 @@
 import asyncio
 import fnmatch
 import tempfile
+import hashlib
 from contextlib import asynccontextmanager, suppress
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from string import Formatter
 from urllib.parse import urlparse
 
-from fastapi import FastAPI, File, HTTPException, Query, Response, UploadFile
+from fastapi import FastAPI, File, HTTPException, Query, Request, Response, UploadFile
+from fastapi.responses import JSONResponse
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import IntegrityError
 
 from .config import Settings
+from .auth import hash_password, new_session_token, verify_password
 from .connectors import FilesystemConnector
 from .file_validation import DocumentRejectedError, FileTooLargeError
 from .models import (
@@ -32,6 +35,12 @@ from .models import (
     TargetSystemCreate,
     TargetSystemUpdate,
     TargetSystemView,
+    LoginRequest,
+    UserAccount,
+    UserCreate,
+    UserRole,
+    UserUpdate,
+    UserView,
 )
 from .pipeline import DocumentPipeline
 from .store import JobStore
@@ -68,6 +77,13 @@ async def watch_hotfolder() -> None:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    if settings.auth_enabled and not store.list_users():
+        store.save_user(UserAccount(
+            username=settings.bootstrap_admin_username,
+            display_name="Administrator",
+            role=UserRole.ADMIN,
+            password_hash=hash_password(settings.bootstrap_admin_password),
+        ))
     store.ensure_default_channel()
     store.ensure_default_target_system()
     watcher = asyncio.create_task(watch_hotfolder())
@@ -80,6 +96,97 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="Document Core", version="0.1.0", lifespan=lifespan)
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+
+def session_user(request: Request) -> UserAccount | None:
+    token = request.cookies.get("document_core_session")
+    return store.get_session_user(hashlib.sha256(token.encode()).hexdigest()) if token else None
+
+
+@app.middleware("http")
+async def authorize(request: Request, call_next):
+    if not settings.auth_enabled:
+        return await call_next(request)
+    path = request.url.path
+    public = path in {"/", "/health", "/v1/auth/login"} or path.startswith("/static/")
+    if public:
+        return await call_next(request)
+    user = session_user(request)
+    if user is None:
+        return JSONResponse({"detail": "Anmeldung erforderlich"}, status_code=401)
+    request.state.user = user
+    admin_prefixes = ("/v1/users", "/v1/input-channels", "/v1/target-systems", "/v1/delivery-rules")
+    if path.startswith(admin_prefixes) and user.role != UserRole.ADMIN:
+        return JSONResponse({"detail": "Administratorrechte erforderlich"}, status_code=403)
+    if request.method not in {"GET", "HEAD", "OPTIONS"} and user.role == UserRole.VIEWER:
+        return JSONResponse({"detail": "Nur Lesezugriff erlaubt"}, status_code=403)
+    return await call_next(request)
+
+
+def user_view(user: UserAccount) -> UserView:
+    return UserView(**user.model_dump(exclude={"password_hash"}))
+
+
+@app.post("/v1/auth/login", response_model=UserView)
+def login(request: LoginRequest, response: Response) -> UserView:
+    user = store.get_user_by_username(request.username)
+    if user is None or not user.active or not verify_password(request.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Benutzername oder Passwort ist falsch")
+    token, token_hash = new_session_token()
+    store.create_session(token_hash, user.id, datetime.now(UTC) + timedelta(hours=settings.session_ttl_hours))
+    user.last_login_at = datetime.now(UTC)
+    store.save_user(user)
+    response.set_cookie("document_core_session", token, httponly=True, samesite="strict", secure=False, max_age=settings.session_ttl_hours * 3600)
+    return user_view(user)
+
+
+@app.get("/v1/auth/me", response_model=UserView)
+def current_user(request: Request) -> UserView:
+    return user_view(request.state.user)
+
+
+@app.post("/v1/auth/logout", status_code=204)
+def logout(request: Request, response: Response) -> Response:
+    token = request.cookies.get("document_core_session")
+    if token:
+        store.delete_session(hashlib.sha256(token.encode()).hexdigest())
+    response.delete_cookie("document_core_session")
+    response.status_code = 204
+    return response
+
+
+@app.get("/v1/users", response_model=list[UserView])
+def list_users() -> list[UserView]:
+    return [user_view(user) for user in store.list_users()]
+
+
+@app.post("/v1/users", response_model=UserView, status_code=201)
+def create_user(request: UserCreate) -> UserView:
+    if store.get_user_by_username(request.username):
+        raise HTTPException(status_code=409, detail="Benutzername ist bereits vergeben")
+    user = UserAccount(**request.model_dump(exclude={"password"}), password_hash=hash_password(request.password))
+    return user_view(store.save_user(user))
+
+
+@app.patch("/v1/users/{user_id}", response_model=UserView)
+def update_user(user_id: str, request: UserUpdate, http_request: Request) -> UserView:
+    user = store.get_user(user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="Benutzer nicht gefunden")
+    values = request.model_dump(exclude_unset=True)
+    password = values.pop("password", None)
+    for key, value in values.items():
+        setattr(user, key, value)
+    if password:
+        user.password_hash = hash_password(password)
+    if user.id == http_request.state.user.id and not user.active:
+        raise HTTPException(status_code=409, detail="Das eigene Konto kann nicht deaktiviert werden")
+    active_admins = [item for item in store.list_users() if item.active and item.role == UserRole.ADMIN]
+    if user.id in {item.id for item in active_admins} and (
+        not user.active or user.role != UserRole.ADMIN
+    ) and len(active_admins) == 1:
+        raise HTTPException(status_code=409, detail="Der letzte aktive Admin muss erhalten bleiben")
+    return user_view(store.save_user(user))
 
 
 @app.get("/", include_in_schema=False)

@@ -26,6 +26,10 @@
         <button class="nav-button" data-view="channels" type="button">Eingangskanäle</button>
         <button class="nav-button" data-view="targets" type="button">Zielsysteme</button>
       </div>
+      <div id="admin-nav" class="nav-section nav-section-separated hidden" aria-label="Administration">
+        <span class="nav-section-label">Administration</span>
+        <button class="nav-button" data-view="users" type="button">Benutzerverwaltung</button>
+      </div>
     </nav>
     <div class="system-state"><span id="health-dot" class="health-dot"></span><span id="health-text">System wird geprüft</span></div>
   </header>
@@ -180,7 +184,19 @@
         </aside>
       </section>
     </div>
+
+    <div id="users-view" class="hidden">
+      <section class="hero channel-hero"><div><p class="eyebrow">Administration</p><h1>Benutzerverwaltung</h1><p class="hero-copy">Konten, Rollen und Zugriffe zentral verwalten.</p></div></section>
+      <section class="channel-layout"><div><div class="section-heading"><div><h2>Benutzer</h2><p>Admins verwalten alle Zugänge.</p></div><button id="reload-users" class="icon-button" type="button">↻</button></div><div id="user-list" class="channel-list"></div></div>
+      <aside class="channel-form-card"><p class="eyebrow">Neuer Zugang</p><h2>Benutzer anlegen</h2><form id="user-form" class="channel-form">
+        <label>Benutzername<input name="username" required minlength="3"></label><label>Anzeigename<input name="display_name" required></label>
+        <label>Rolle<select name="role"><option value="viewer">Betrachter</option><option value="operator">Operator</option><option value="admin">Admin</option></select></label>
+        <label>Startpasswort<input name="password" type="password" required minlength="12" autocomplete="new-password"></label>
+        <button class="button primary" type="submit">Benutzer anlegen</button></form></aside></section>
+    </div>
   </main>
+
+  <div id="login-screen" class="login-screen hidden"><form id="login-form" class="login-card"><span class="brand-mark">DC</span><p class="eyebrow">Document Core</p><h1>Anmelden</h1><label>Benutzername<input name="username" autocomplete="username" required></label><label>Passwort<input name="password" type="password" autocomplete="current-password" required></label><button class="button primary" type="submit">Anmelden</button><p id="login-error" class="channel-error hidden"></p></form></div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script src="/static/app.js" defer></script>

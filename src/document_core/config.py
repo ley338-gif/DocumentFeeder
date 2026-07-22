@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     clamav_host: str = "clamav"
     clamav_port: int = Field(default=3310, ge=1, le=65535)
     malware_scan_timeout_seconds: float = Field(default=30, gt=0)
+    bootstrap_admin_username: str = "admin"
+    bootstrap_admin_password: str = "document-core-admin"
+    session_ttl_hours: int = Field(default=12, ge=1, le=168)
+    auth_enabled: bool = True
 
     @property
     def inbox_dir(self) -> Path:

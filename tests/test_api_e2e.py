@@ -14,7 +14,7 @@ from tests.test_pdf_processing import text_pdf_bytes
 
 
 def configure_api(tmp_path: Path, monkeypatch) -> Settings:
-    settings = Settings(data_dir=tmp_path)
+    settings = Settings(data_dir=tmp_path, auth_enabled=False)
     settings.create_directories()
     store = JobStore("sqlite://")
     pipeline = DocumentPipeline(settings, store, FilesystemConnector(settings.output_dir))

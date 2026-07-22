@@ -28,6 +28,31 @@ jeder Zustellung geprüft. Die UI-Anzeige allein ist keine Sicherheitsgrenze. Be
 bleibt eine vorhandene Zielkonfiguration erhalten, eine Zustellung wird jedoch kontrolliert
 abgewiesen. `GET /v1/connector-modules` liefert installierte Module, Fähigkeiten und Lizenzstatus.
 
+## Schutz von Zugangsdaten
+
+Felder aus `secret_fields` werden niemals über die Verwaltungs-API ausgegeben. Bearer-Tokens
+werden vor dem Schreiben in PostgreSQL mit Fernet authentifiziert verschlüsselt; in der
+Datenbank steht ausschließlich ein mit `enc:v1:` markierter Ciphertext. Der Schlüssel wird als
+`DOCUMENT_CORE_CONNECTOR_SECRET_KEYS` oder produktiv als Docker-/Orchestrator-Secret über
+`DOCUMENT_CORE_CONNECTOR_SECRET_KEYS_FILE` bereitgestellt und gehört weder in Git noch in Logs.
+
+Die Variable akzeptiert für Rotation eine kommaseparierte Schlüsselliste. Der erste Schlüssel ist
+der neue Primärschlüssel, weitere Einträge sind alte Entschlüsselungsschlüssel. Beim Start von API
+und Worker werden bestehende Ciphertexte auf den Primärschlüssel rotiert. Danach kann der alte
+Schlüssel entfernt werden. Bestehende Klartext-Tokens werden beim ersten Start mit konfiguriertem
+Schlüssel automatisch migriert. Fehlt der Schlüssel oder passt keiner der Schlüssel, verweigert
+der Prozess den Start, bevor Dokumente verarbeitet werden.
+
+Ein Schlüssel wird lokal so erzeugt:
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+Bekannte Secretwerte werden zusätzlich zentral aus technischen Fehlern und Audit-Details
+entfernt. Die Redaction ergänzt die Verschlüsselung, ersetzt aber keine restriktive
+Protokollierung externer Antworten.
+
 Minimaler Registrierungsvertrag:
 
 ```python

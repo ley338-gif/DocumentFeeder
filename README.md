@@ -18,6 +18,7 @@ Document Core ist eine erweiterbare, domänenneutrale Dokumenten-Pipeline: Dokum
 - Workflow-Regeln (Pflichtfelder, Quarantäne)
 - generisches Connector-Interface, Dateisystem- und HTTP-Connector
 - persistente Zielsystemprofile mit Standardziel, Timeout und optionalem Bearer-Token
+- verschlüsselte Connector-Secrets mit Startschutz, Redaction und Schlüsselrotation
 - dokumenttypabhängige Ablageregeln und sichere Dateisystem-Pfadvorlagen
 - persistentes Aktivitäts- und Zustellprotokoll mit Ziel, Versuch, Dauer und technischer Quittung
 - automatisierte Tests und Docker Compose

@@ -214,7 +214,7 @@ class DocumentPipeline:
             job.last_error = None
             job.next_attempt_at = None
         except Exception as exc:
-            error = str(exc)
+            error = getattr(self.store, "redact", lambda value: value)(str(exc))
             job.errors.append(error)
             job.last_error = error
             if job.attempt_count < self.settings.worker_max_attempts:
@@ -307,8 +307,9 @@ class DocumentPipeline:
             job.metadata["destination_reference"] = self._deliver(job)
             job.status = JobStatus.DELIVERED
         except Exception as exc:
-            job.errors.append(str(exc))
-            job.last_error = str(exc)
+            error = getattr(self.store, "redact", lambda value: value)(str(exc))
+            job.errors.append(error)
+            job.last_error = error
             job.status = JobStatus.FAILED
         self.store.save(job)
         return job
@@ -362,8 +363,9 @@ class DocumentPipeline:
             return reference
         except Exception as exc:
             completed_at = datetime.now(UTC)
+            error = getattr(self.store, "redact", lambda value: value)(str(exc))
             if target is not None:
-                target.last_error = str(exc)
+                target.last_error = error
                 getattr(self.store, "save_target_system")(target)
             self._event(
                 job,
@@ -372,7 +374,7 @@ class DocumentPipeline:
                 status=JobStatus.FAILED,
                 attempt=job.attempt_count,
                 target=target,
-                error=str(exc),
+                error=error,
                 details=event_details,
                 started_at=started_at,
                 completed_at=completed_at,

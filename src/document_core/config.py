@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     worker_retry_base_seconds: int = 5
     connector: str = "filesystem"
     connector_entitlements: str = ""
+    connector_secret_keys: str = ""
+    connector_secret_keys_file: Path | None = None
     require_routing_reference: bool = False
     tesseract_lang: str = "deu+eng"
     ingest_chunk_size_bytes: int = Field(default=1024 * 1024, ge=4096, le=16 * 1024 * 1024)
@@ -51,6 +53,12 @@ class Settings(BaseSettings):
     @property
     def quarantine_dir(self) -> Path:
         return self.data_dir / "quarantine"
+
+    @property
+    def connector_secret_key_material(self) -> str:
+        if self.connector_secret_keys_file:
+            return self.connector_secret_keys_file.read_text(encoding="utf-8").strip()
+        return self.connector_secret_keys
 
     def create_directories(self) -> None:
         for path in (

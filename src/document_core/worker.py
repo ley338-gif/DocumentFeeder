@@ -9,6 +9,7 @@ from .config import Settings
 from .connectors import FilesystemConnector
 from .pipeline import DocumentPipeline
 from .store import JobStore
+from .secrets import SecretCipher
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -39,7 +40,12 @@ def lease_heartbeat(store: JobStore, job_id: str, worker_id: str, lease_seconds:
 def run() -> None:
     settings = Settings()
     settings.create_directories()
-    store = JobStore(settings.database_url, create_schema=settings.database_auto_create)
+    store = JobStore(
+        settings.database_url,
+        create_schema=settings.database_auto_create,
+        secret_cipher=SecretCipher.from_csv(settings.connector_secret_key_material),
+    )
+    store.migrate_or_rotate_target_secrets()
     pipeline = DocumentPipeline(settings, store, FilesystemConnector(settings.output_dir))
     worker_id = f"{socket.gethostname()}-{uuid4().hex[:8]}"
     logger.info("Worker %s started", worker_id)

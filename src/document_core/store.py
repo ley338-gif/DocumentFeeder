@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
-from sqlalchemy import JSON, DateTime, Integer, String, Text, and_, create_engine, delete, or_, select, text, update
+from sqlalchemy import JSON, DateTime, Integer, String, Text, and_, create_engine, delete, inspect, or_, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -12,6 +13,7 @@ from .models import (
     DeliveryRule, DocumentJob, InputChannel, JobEvent, JobStatus, TargetSystem,
     AuditEvent, UserAccount,
 )
+from .secrets import SecretCipher
 
 
 class JobRepository(Protocol):
@@ -191,7 +193,12 @@ class SystemSettingRow(Base):
 class JobStore:
     """SQL-backed job repository used with PostgreSQL and SQLite."""
 
-    def __init__(self, database_url: str, create_schema: bool = True):
+    def __init__(
+        self,
+        database_url: str,
+        create_schema: bool = True,
+        secret_cipher: SecretCipher | None = None,
+    ):
         engine_options: dict = {"pool_pre_ping": True}
         if database_url in {"sqlite://", "sqlite:///:memory:"}:
             engine_options.update(
@@ -199,8 +206,37 @@ class JobStore:
             )
         self.engine = create_engine(database_url, **engine_options)
         self.sessions = sessionmaker(self.engine, expire_on_commit=False)
+        self.secret_cipher = secret_cipher or SecretCipher.from_csv(
+            os.getenv("DOCUMENT_CORE_CONNECTOR_SECRET_KEYS", "")
+        )
         if create_schema:
             Base.metadata.create_all(self.engine)
+            self.migrate_or_rotate_target_secrets()
+
+    def migrate_or_rotate_target_secrets(self) -> None:
+        if "target_systems" not in inspect(self.engine).get_table_names():
+            return
+        with self.sessions.begin() as session:
+            rows = session.scalars(
+                select(TargetSystemRow).where(TargetSystemRow.bearer_token.is_not(None))
+            ).all()
+            if not rows:
+                return
+            for row in rows:
+                row.bearer_token = self.secret_cipher.migrate_or_rotate(row.bearer_token or "")
+            for row in session.scalars(select(TargetSystemRow)).all():
+                row.last_error = self.redact(row.last_error)
+            for row in session.scalars(select(JobRow)).all():
+                row.last_error = self.redact(row.last_error)
+                row.errors = self.redact(row.errors)
+            for row in session.scalars(select(JobEventRow)).all():
+                row.error = self.redact(row.error)
+                row.details = self.redact(row.details)
+            for row in session.scalars(select(AuditEventRow)).all():
+                row.details = self.redact(row.details)
+
+    def redact(self, value):
+        return self.secret_cipher.redact(value)
 
     @staticmethod
     def _values(job: DocumentJob) -> dict:
@@ -508,6 +544,7 @@ class JobStore:
             return failures
 
     def save_audit_event(self, event: AuditEvent) -> AuditEvent:
+        event.details = self.redact(event.details)
         with self.sessions.begin() as session:
             session.add(AuditEventRow(**event.model_dump()))
         return event
@@ -637,8 +674,13 @@ class JobStore:
         return self.save_channel(InputChannel(name="Standard-Hotfolder", directory="hotfolder"))
 
     @staticmethod
-    def _target_model(row: TargetSystemRow) -> TargetSystem:
-        return TargetSystem.model_validate({column.name: getattr(row, column.name) for column in row.__table__.columns})
+    def _target_values(row: TargetSystemRow) -> dict:
+        return {column.name: getattr(row, column.name) for column in row.__table__.columns}
+
+    def _target_model(self, row: TargetSystemRow) -> TargetSystem:
+        values = self._target_values(row)
+        values["bearer_token"] = self.secret_cipher.decrypt(values["bearer_token"])
+        return TargetSystem.model_validate(values)
 
     def list_target_systems(self, enabled_only: bool = False) -> list[TargetSystem]:
         with self.sessions() as session:
@@ -664,6 +706,7 @@ class JobStore:
     def save_target_system(self, target: TargetSystem) -> TargetSystem:
         target.updated_at = datetime.now(UTC)
         values = target.model_dump()
+        values["bearer_token"] = self.secret_cipher.encrypt(target.bearer_token)
         with self.sessions.begin() as session:
             if target.is_default:
                 session.execute(

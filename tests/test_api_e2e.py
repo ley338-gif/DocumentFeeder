@@ -9,7 +9,7 @@ from document_core.file_validation import MalwareDetectedError
 from document_core.malware import MalwareScanner
 from document_core.models import JobStatus
 from document_core.pipeline import DocumentPipeline
-from document_core.store import JobStore
+from document_core.store import JobStore, TargetSystemRow
 from tests.test_pdf_processing import text_pdf_bytes
 
 
@@ -356,6 +356,10 @@ def test_target_systems_can_be_managed_without_exposing_tokens(tmp_path: Path, m
     assert target["has_bearer_token"] is True
     assert "bearer_token" not in target
     assert all("bearer_token" not in item for item in listing.json())
+    with api_module.store.sessions() as session:
+        stored_token = session.get(TargetSystemRow, target["id"]).bearer_token
+    assert stored_token.startswith("enc:v1:")
+    assert "top-secret" not in stored_token
     assert delete_default.status_code == 409
     assert uninstalled.status_code == 422
     assert "nicht installiert" in uninstalled.json()["detail"]

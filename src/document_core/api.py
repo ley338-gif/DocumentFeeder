@@ -49,11 +49,16 @@ from .models import (
 )
 from .pipeline import DocumentPipeline
 from .store import JobStore
+from .secrets import SecretCipher
 
 
 settings = Settings()
 settings.create_directories()
-store = JobStore(settings.database_url, create_schema=settings.database_auto_create)
+store = JobStore(
+    settings.database_url,
+    create_schema=settings.database_auto_create,
+    secret_cipher=SecretCipher.from_csv(settings.connector_secret_key_material),
+)
 pipeline = DocumentPipeline(settings, store, FilesystemConnector(settings.output_dir))
 
 
@@ -85,6 +90,7 @@ async def watch_hotfolder() -> None:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    store.migrate_or_rotate_target_secrets()
     if settings.auth_enabled and not store.list_users():
         if not settings.bootstrap_admin_password:
             raise RuntimeError("Bootstrap-Admin-Passwort muss für die erste Anmeldung gesetzt sein")
@@ -483,6 +489,11 @@ def validate_target(target: TargetSystem) -> None:
     target.name = target.name.strip()
     if not target.name:
         raise HTTPException(status_code=422, detail="Name darf nicht leer sein")
+    if target.bearer_token and not store.secret_cipher.available:
+        raise HTTPException(
+            status_code=503,
+            detail="Connector-Secrets sind nicht konfiguriert",
+        )
     try:
         connector_registry.require_available(target.kind)
     except ValueError as exc:

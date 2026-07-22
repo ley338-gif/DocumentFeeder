@@ -32,6 +32,8 @@ Queue und Worker werden über folgende Variablen gesteuert:
 | `DOCUMENT_CORE_MAX_IMAGE_PIXELS` | `40000000` | maximale Pixelzahl pro Bild/OCR-Render |
 | `DOCUMENT_CORE_OCR_TIMEOUT_SECONDS` | `60` | Zeitlimit je Tesseract-Aufruf |
 | `DOCUMENT_CORE_MALWARE_SCANNER` | `disabled` | `disabled` oder `clamav` |
+| `DOCUMENT_CORE_CONNECTOR_SECRET_KEYS` | leer | Primärer Fernet-Schlüssel, danach optionale alte Rotationsschlüssel |
+| `DOCUMENT_CORE_CONNECTOR_SECRET_KEYS_FILE` | leer | Bevorzugter Pfad zu einem Docker-/Orchestrator-Secret mit derselben Schlüsselliste |
 | `DOCUMENT_CORE_CLAMAV_HOST` | `clamav` | Hostname eines erreichbaren `clamd` |
 | `DOCUMENT_CORE_CLAMAV_PORT` | `3310` | TCP-Port von `clamd` |
 | `DOCUMENT_CORE_MALWARE_SCAN_TIMEOUT_SECONDS` | `30` | Verbindungs- und Antwortlimit |

@@ -29,6 +29,7 @@
       <div id="admin-nav" class="nav-section nav-section-separated hidden" aria-label="Administration">
         <span class="nav-section-label">Administration</span>
         <button class="nav-button" data-view="users" type="button">Benutzerverwaltung</button>
+        <button class="nav-button" data-view="audit" type="button">Systemprotokoll</button>
       </div>
     </nav>
     <div class="sidebar-footer">
@@ -204,6 +205,11 @@
         <label>Rolle<select name="role"><option value="viewer">Betrachter</option><option value="operator">Operator</option><option value="admin">Admin</option></select></label>
         <label>Startpasswort<input name="password" type="password" required minlength="12" autocomplete="new-password"></label>
         <button class="button primary" type="submit">Benutzer anlegen</button></form></aside></section>
+    </div>
+
+    <div id="audit-view" class="hidden">
+      <section class="hero channel-hero"><div><p class="eyebrow">Administration</p><h1>Systemprotokoll</h1><p class="hero-copy">Anmeldungen und Änderungen übergreifend nachvollziehen.</p></div></section>
+      <section class="audit-panel"><div class="toolbar audit-toolbar"><label class="search"><span class="sr-only">Protokoll durchsuchen</span><input id="audit-search" type="search" placeholder="Benutzer, Aktion oder Objekt"></label><select id="audit-outcome"><option value="">Alle Ergebnisse</option><option value="success">Erfolgreich</option><option value="failure">Fehlgeschlagen</option></select><button id="reload-audit" class="icon-button" type="button">↻</button></div><div id="audit-list" class="audit-list"></div><div id="audit-page-info" class="pagination"></div></section>
     </div>
   </main>
 

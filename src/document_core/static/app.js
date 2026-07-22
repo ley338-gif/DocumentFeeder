@@ -329,6 +329,7 @@ function switchView(view, sourceButton = null) {
   $("#targets-view").classList.toggle("hidden", view !== "targets");
   $("#automation-view").classList.toggle("hidden", view !== "automation");
   $("#users-view").classList.toggle("hidden", view !== "users");
+  $("#audit-view").classList.toggle("hidden", view !== "audit");
   if (sourceButton) {
     document.querySelectorAll(".nav-button").forEach(button => button.classList.toggle("active", button === sourceButton));
   }
@@ -341,6 +342,18 @@ function switchView(view, sourceButton = null) {
   if (view === "targets") loadTargets();
   if (view === "automation") loadRules();
   if (view === "users") loadUsers();
+  if (view === "audit") loadAuditEvents();
+}
+
+async function loadAuditEvents() {
+  const params = new URLSearchParams({limit: "100"});
+  const query = $("#audit-search").value.trim(); const outcome = $("#audit-outcome").value;
+  if (query) params.set("q", query); if (outcome) params.set("outcome", outcome);
+  try {
+    const result = await api(`/v1/audit-events?${params}`);
+    $("#audit-list").innerHTML = result.items.length ? result.items.map(event => `<article class="audit-row"><span class="audit-status ${event.outcome}"></span><div><strong>${esc(event.actor_username)}</strong><span>${esc(event.action)}</span></div><div><strong>${esc(event.resource_type)}</strong><span>${esc(event.resource_id)}</span></div><span class="badge ${event.outcome === "success" ? "delivered" : "failed"}">${event.outcome === "success" ? "Erfolgreich" : "Fehler"}</span><time>${formatTime(event.created_at)}</time></article>`).join("") : '<div class="empty-list"><strong>Keine Protokolleinträge gefunden</strong></div>';
+    $("#audit-page-info").textContent = `${result.total} Einträge`;
+  } catch (error) { toast(error.message, true); }
 }
 
 async function loadUsers() {
@@ -597,6 +610,9 @@ $("#reload-targets").addEventListener("click", loadTargets);
 $("#rule-form").addEventListener("submit", createRule);
 $("#user-form").addEventListener("submit", createUser);
 $("#reload-users").addEventListener("click", loadUsers);
+$("#reload-audit").addEventListener("click", loadAuditEvents);
+$("#audit-outcome").addEventListener("change", loadAuditEvents);
+$("#audit-search").addEventListener("input", event => { window.clearTimeout(state.auditTimer); state.auditTimer = window.setTimeout(loadAuditEvents, 250); });
 $("#login-form").addEventListener("submit", login);
 $("#profile-form").addEventListener("submit", saveProfile);
 $("#logout-button").addEventListener("click", logout);

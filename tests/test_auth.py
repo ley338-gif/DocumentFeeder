@@ -45,12 +45,18 @@ def test_admin_can_login_and_manage_users(tmp_path: Path, monkeypatch):
             },
         )
         users = client.get("/v1/users")
+        audit = client.get("/v1/audit-events")
 
     assert login.status_code == 200
     assert login.json()["role"] == "admin"
     assert "password_hash" not in login.json()
     assert created.status_code == 201
     assert len(users.json()) == 2
+    assert audit.status_code == 200
+    assert {item["action"] for item in audit.json()["items"]} >= {
+        "LOGIN",
+        "POST /v1/users",
+    }
 
 
 def test_viewer_has_read_only_access_and_no_user_management(tmp_path: Path, monkeypatch):
@@ -76,3 +82,21 @@ def test_viewer_has_read_only_access_and_no_user_management(tmp_path: Path, monk
         assert profile.json()["display_name"] == "Neuer Name"
         assert viewer.post("/v1/auth/logout").status_code == 204
         assert viewer.get("/v1/auth/me").status_code == 401
+
+
+def test_failed_login_is_audited_without_password(tmp_path: Path, monkeypatch):
+    configure_auth_api(tmp_path, monkeypatch)
+    with TestClient(api_module.app) as client:
+        failed = client.post(
+            "/v1/auth/login", json={"username": "admin", "password": "wrong-password"}
+        )
+        client.post(
+            "/v1/auth/login",
+            json={"username": "admin", "password": "secure-test-password"},
+        )
+        audit = client.get("/v1/audit-events").json()["items"]
+
+    assert failed.status_code == 401
+    failure = next(item for item in audit if item["outcome"] == "failure")
+    assert failure["action"] == "LOGIN"
+    assert "password" not in str(failure["details"]).lower()

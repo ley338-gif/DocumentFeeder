@@ -69,6 +69,26 @@ class ProfileUpdate(BaseModel):
     password: str | None = Field(default=None, min_length=12, max_length=200)
 
 
+class AuditEvent(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))
+    actor_user_id: str | None = None
+    actor_username: str
+    action: str
+    resource_type: str
+    resource_id: str | None = None
+    outcome: str
+    status_code: int
+    details: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
+class AuditListResponse(BaseModel):
+    items: list[AuditEvent]
+    total: int
+    limit: int
+    offset: int
+
+
 class RoutingReference(BaseModel):
     namespace: str = Field(min_length=1, max_length=100)
     type: str = Field(min_length=1, max_length=100)

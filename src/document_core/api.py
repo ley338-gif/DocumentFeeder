@@ -20,6 +20,8 @@ from .connectors import FilesystemConnector
 from .file_validation import DocumentRejectedError, FileTooLargeError
 from .models import (
     DocumentJob,
+    AuditEvent,
+    AuditListResponse,
     DeliveryRule,
     DeliveryRuleCreate,
     DeliveryRuleUpdate,
@@ -104,6 +106,22 @@ def session_user(request: Request) -> UserAccount | None:
     return store.get_session_user(hashlib.sha256(token.encode()).hexdigest()) if token else None
 
 
+def record_audit(user: UserAccount | None, method: str, path: str, status_code: int) -> None:
+    parts = [part for part in path.split("/") if part]
+    resource_type = parts[1] if len(parts) > 1 else "system"
+    resource_id = parts[2] if len(parts) > 2 else None
+    store.save_audit_event(AuditEvent(
+        actor_user_id=user.id if user else None,
+        actor_username=user.username if user else "unknown",
+        action=f"{method} {path}",
+        resource_type=resource_type,
+        resource_id=resource_id,
+        outcome="success" if status_code < 400 else "failure",
+        status_code=status_code,
+        details={"method": method, "path": path},
+    ))
+
+
 @app.middleware("http")
 async def authorize(request: Request, call_next):
     if not settings.auth_enabled:
@@ -116,7 +134,7 @@ async def authorize(request: Request, call_next):
     if user is None:
         return JSONResponse({"detail": "Anmeldung erforderlich"}, status_code=401)
     request.state.user = user
-    if path.startswith("/v1/users") and user.role != UserRole.ADMIN:
+    if path.startswith(("/v1/users", "/v1/audit-events")) and user.role != UserRole.ADMIN:
         return JSONResponse({"detail": "Administratorrechte erforderlich"}, status_code=403)
     configuration = ("/v1/input-channels", "/v1/target-systems", "/v1/delivery-rules")
     safe_method = request.method in {"GET", "HEAD", "OPTIONS"}
@@ -125,7 +143,10 @@ async def authorize(request: Request, call_next):
     self_service = path in {"/v1/auth/me", "/v1/auth/logout"}
     if not safe_method and user.role == UserRole.VIEWER and not self_service:
         return JSONResponse({"detail": "Nur Lesezugriff erlaubt"}, status_code=403)
-    return await call_next(request)
+    response = await call_next(request)
+    if not safe_method:
+        record_audit(user, request.method, path, response.status_code)
+    return response
 
 
 def user_view(user: UserAccount) -> UserView:
@@ -136,11 +157,26 @@ def user_view(user: UserAccount) -> UserView:
 def login(request: LoginRequest, response: Response) -> UserView:
     user = store.get_user_by_username(request.username)
     if user is None or not user.active or not verify_password(request.password, user.password_hash):
+        store.save_audit_event(AuditEvent(
+            actor_username=request.username,
+            action="LOGIN",
+            resource_type="session",
+            outcome="failure",
+            status_code=401,
+        ))
         raise HTTPException(status_code=401, detail="Benutzername oder Passwort ist falsch")
     token, token_hash = new_session_token()
     store.create_session(token_hash, user.id, datetime.now(UTC) + timedelta(hours=settings.session_ttl_hours))
     user.last_login_at = datetime.now(UTC)
     store.save_user(user)
+    store.save_audit_event(AuditEvent(
+        actor_user_id=user.id,
+        actor_username=user.username,
+        action="LOGIN",
+        resource_type="session",
+        outcome="success",
+        status_code=200,
+    ))
     response.set_cookie("document_core_session", token, httponly=True, samesite="strict", secure=False, max_age=settings.session_ttl_hours * 3600)
     return user_view(user)
 
@@ -202,6 +238,26 @@ def update_user(user_id: str, request: UserUpdate, http_request: Request) -> Use
     ) and len(active_admins) == 1:
         raise HTTPException(status_code=409, detail="Der letzte aktive Admin muss erhalten bleiben")
     return user_view(store.save_user(user))
+
+
+@app.get("/v1/audit-events", response_model=AuditListResponse)
+def list_audit_events(
+    q: str | None = Query(default=None, max_length=200),
+    outcome: str | None = Query(default=None, pattern="^(success|failure)$"),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> AuditListResponse:
+    events = store.list_audit_events()
+    if outcome:
+        events = [event for event in events if event.outcome == outcome]
+    if q:
+        needle = q.casefold()
+        events = [event for event in events if needle in " ".join((
+            event.actor_username, event.action, event.resource_type, event.resource_id or ""
+        )).casefold()]
+    return AuditListResponse(
+        items=events[offset:offset + limit], total=len(events), limit=limit, offset=offset
+    )
 
 
 @app.get("/", include_in_schema=False)

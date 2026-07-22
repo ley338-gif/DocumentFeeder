@@ -10,7 +10,7 @@ from sqlalchemy.pool import StaticPool
 
 from .models import (
     DeliveryRule, DocumentJob, InputChannel, JobEvent, JobStatus, TargetSystem,
-    UserAccount,
+    AuditEvent, UserAccount,
 )
 
 
@@ -157,6 +157,20 @@ class SessionRow(Base):
     token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
     user_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class AuditEventRow(Base):
+    __tablename__ = "audit_events"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    actor_user_id: Mapped[str | None] = mapped_column(String(36), index=True)
+    actor_username: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    action: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    resource_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    resource_id: Mapped[str | None] = mapped_column(String(100))
+    outcome: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    status_code: Mapped[int] = mapped_column(Integer, nullable=False)
+    details: Mapped[dict] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
 
 
 class JobStore:
@@ -455,6 +469,23 @@ class JobStore:
     def delete_session(self, token_hash: str) -> None:
         with self.sessions.begin() as session:
             session.execute(delete(SessionRow).where(SessionRow.token_hash == token_hash))
+
+    def save_audit_event(self, event: AuditEvent) -> AuditEvent:
+        with self.sessions.begin() as session:
+            session.add(AuditEventRow(**event.model_dump()))
+        return event
+
+    def list_audit_events(self) -> list[AuditEvent]:
+        with self.sessions() as session:
+            rows = session.scalars(
+                select(AuditEventRow).order_by(AuditEventRow.created_at.desc())
+            ).all()
+            return [AuditEvent.model_validate({
+                key: getattr(row, key) for key in (
+                    "id", "actor_user_id", "actor_username", "action", "resource_type",
+                    "resource_id", "outcome", "status_code", "details", "created_at",
+                )
+            }) for row in rows]
 
     def healthcheck(self) -> bool:
         try:

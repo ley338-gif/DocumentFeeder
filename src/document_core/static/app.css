@@ -258,6 +258,12 @@ body { background: var(--paper); font-size: 14px; }
 body.read-only-config #channels-view .channel-form-card, body.read-only-config #targets-view .channel-form-card, body.read-only-config #automation-view .channel-form-card, body.read-only-config #channels-view .channel-actions, body.read-only-config #targets-view .channel-actions, body.read-only-config #automation-view .channel-actions { display: none; }
 body.read-only-config #channels-view .channel-layout, body.read-only-config #targets-view .channel-layout, body.read-only-config #automation-view .channel-layout { grid-template-columns: 1fr; }
 body.viewer-mode .upload-button { display: none; }
+.audit-panel { overflow: hidden; border: 1px solid var(--line); border-radius: 9px; background: white; box-shadow: var(--shadow); }
+.audit-toolbar { border-bottom: 1px solid var(--line); }
+.audit-list { display: grid; }
+.audit-row { display: grid; grid-template-columns: 10px minmax(180px,1.2fr) minmax(180px,1fr) 90px 150px; align-items: center; gap: 12px; padding: 12px 15px; border-bottom: 1px solid var(--line); }
+.audit-row > div { min-width: 0; }.audit-row strong, .audit-row span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.audit-row strong { font-size: 12px; }.audit-row div span, .audit-row time { color: var(--muted); font-size: 11px; }
+.audit-status { width: 7px; height: 7px; border-radius: 50%; background: #5e6ad2; }.audit-status.failure { background: var(--red); }
 
 main { max-width: none; margin: 0 0 0 232px; padding: 34px 42px 56px; }
 .hero { align-items: center; margin-bottom: 24px; }

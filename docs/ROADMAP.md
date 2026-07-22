@@ -22,7 +22,8 @@ Ziel: synthetisches Textdokument Ende-zu-Ende vom Eingang zum Dateisystem-Connec
 - persistentes Job- und Zustellprotokoll mit UI-Timeline (MVP umgesetzt)
 - Review-API/-UI für Quarantäne (MVP umgesetzt)
 - lokale Authentisierung, Rollenmodell und Admin-Benutzerverwaltung (MVP umgesetzt)
-- zentrales Systemprotokoll und produktionsfähiger Audit-Trail
+- zentrales Systemprotokoll mit Benutzer-, Aktions- und Ergebnisfiltern (MVP umgesetzt)
+- Aufbewahrung, Export und Manipulationsschutz für den produktionsfähigen Audit-Trail
 - PDF-Blackbox-Suite für beschädigte, leere, gedrehte, gemischte und übergroße PDFs (umgesetzt)
 - providerneutrale Malware-Prüfung und ClamAV-Streaming-Adapter (umgesetzt)
 - produktiver ClamAV-Betrieb mit Signaturupdates und Monitoring

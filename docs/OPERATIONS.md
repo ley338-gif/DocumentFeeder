@@ -170,6 +170,13 @@ wird unten in der Navigation mit Rolle angezeigt und kann dort Anzeigenamen und 
 Für einen TLS-Betrieb muss das Session-Cookie im nächsten Härtungsschritt zusätzlich als
 `Secure` konfiguriert und ein expliziter CSRF-Schutz ergänzt werden.
 
+Admins sehen unter **Administration → Systemprotokoll** erfolgreiche und fehlgeschlagene
+Anmeldungen sowie schreibende API-Aktionen. Einträge enthalten Benutzer, Zeitpunkt, Aktion,
+Bereich, optionale Objekt-ID und HTTP-Ergebnis. Passwörter, Tokens, Request-Inhalte und
+Dokumenttexte werden nicht protokolliert. Suche und Ergebnisfilter arbeiten auf der
+persistenten Audit-Tabelle `audit_events`. Export, Aufbewahrungsfristen und technischer
+Manipulationsschutz bleiben ein nachgelagerter Produktionsschritt.
+
 - TLS, Authentisierung und rollenbasierte Autorisierung ergänzen.
 - Datenbank, Backups und Datenträger verschlüsseln.
 - Inhalte und personenbezogene Metadaten niemals in Standardlogs schreiben.

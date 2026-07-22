@@ -1,5 +1,8 @@
 from pathlib import Path
+import hashlib
 import json
+
+import pytest
 
 from document_core.config import Settings
 from document_core.connectors import FilesystemConnector
@@ -69,6 +72,48 @@ def test_extracted_null_bytes_are_removed_before_persistence(tmp_path: Path):
     assert "\x00" not in job.text_preview
 
 
+def test_ingest_hashes_and_copies_in_chunks(tmp_path: Path, monkeypatch):
+    settings = Settings(data_dir=tmp_path, ingest_chunk_size_bytes=4096)
+    settings.create_directories()
+    content = b"Bericht\n" + (b"x" * 20_000)
+    source = tmp_path / "large.txt"
+    source.write_bytes(content)
+    pipeline = DocumentPipeline(
+        settings, JobStore("sqlite://"), FilesystemConnector(settings.output_dir)
+    )
+
+    def reject_read_bytes(_path):
+        raise AssertionError("ingest must not load the complete file with Path.read_bytes()")
+
+    monkeypatch.setattr(Path, "read_bytes", reject_read_bytes)
+    job = pipeline.ingest(source, "stream-test")
+
+    assert job.sha256 == hashlib.sha256(content).hexdigest()
+    assert job.stored_path.read_text(encoding="utf-8").startswith("Bericht")
+    assert not list(settings.inbox_dir.glob(".ingest-*.tmp"))
+
+
+def test_ingest_removes_staging_and_inbox_file_when_persistence_fails(
+    tmp_path: Path, monkeypatch
+):
+    settings = Settings(data_dir=tmp_path)
+    settings.create_directories()
+    source = tmp_path / "failure.txt"
+    source.write_text("Bericht\nBetreff: Fehlerfall", encoding="utf-8")
+    store = JobStore("sqlite://")
+    pipeline = DocumentPipeline(settings, store, FilesystemConnector(settings.output_dir))
+
+    def fail_persistence(_job):
+        raise RuntimeError("synthetic database failure")
+
+    monkeypatch.setattr(store, "create_if_absent", fail_persistence)
+
+    with pytest.raises(RuntimeError, match="synthetic database failure"):
+        pipeline.ingest(source, "failure-test")
+
+    assert list(settings.inbox_dir.iterdir()) == []
+
+
 def test_document_reaches_configured_http_target(tmp_path: Path, monkeypatch):
     settings = Settings(data_dir=tmp_path)
     settings.create_directories()
@@ -116,7 +161,11 @@ def test_document_reaches_configured_http_target(tmp_path: Path, monkeypatch):
     assert captured["payload"]["document_type"] == "report"
     assert captured["authorization"] == "Bearer secret"
     assert store.get_target_system(target.id).last_delivery_at is not None
-    delivery = store.list_events(job.id)[-1]
+    delivery = next(
+        event
+        for event in store.list_events(job.id)
+        if event.event_type == "delivery_succeeded"
+    )
     assert delivery.event_type == "delivery_succeeded"
     assert delivery.target_name == "HTTP Sandbox"
     assert delivery.external_reference == "remote:42"

@@ -48,6 +48,12 @@ Technische Fehler planen den Job mit exponentiellem Backoff erneut ein. Fachlich
 Dokumente wechseln ohne Retry nach `quarantined`. Nach Erreichen von `worker_max_attempts`
 endet ein technischer Fehler in `failed`.
 
+Die Ingestion liest Quelldateien blockweise, schreibt gleichzeitig eine verborgene
+Staging-Datei in der Inbox und berechnet SHA-256 über exakt dieselben Bytes. Nach der
+Deduplizierungsprüfung wird die Staging-Datei atomar zum endgültigen Inbox-Pfad. Ein
+eindeutiger Datenbank-Constraint bleibt die letzte Absicherung bei parallelen Eingängen;
+Verlierer und Fehlerpfade entfernen ihre nicht referenzierten Dateien.
+
 Jeder Job besitzt ID, Hash, Quelle, Originalname, Status, Metadaten, Fehler und Zeitstempel. Review-Entscheidungen werden mit Bearbeiter, Begründung und Änderungen protokolliert. Für Produktion sind Rollen/Rechte, Verschlüsselung, Aufbewahrung und Löschkonzepte vor Verarbeitung echter Fachdaten verpflichtend.
 
 Zusätzlich wird jeder relevante Verarbeitungsschritt unveränderlich in `job_events`

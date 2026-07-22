@@ -43,6 +43,9 @@ Vor jedem Eingang prüft Document Core den SHA-256-Hash. Identischer Dateiinhalt
 auf den vorhandenen Job und wird mit `duplicate: true` sowie einem Event
 `duplicate_detected` gekennzeichnet. Der Dateiname darf abweichen. Auch bei parallelen
 Eingängen entfernt die Pipeline eine nicht benötigte zweite Arbeitskopie.
+Hashing und Staging erfolgen blockweise mit `DOCUMENT_CORE_INGEST_CHUNK_SIZE_BYTES`
+(Standard: 1 MiB). Verborgene `.ingest-*.tmp`-Dateien werden bei Duplikaten und Fehlern
+entfernt. Der Datenbank-Constraint auf `sha256` sichert parallele Eingänge zusätzlich ab.
 
 Hotfolder werden persistent in der Datenbank gespeichert und in der Operator-Konsole unter
 **Eingangskanäle** verwaltet. Alternativ steht die API `/v1/input-channels` zur Verfügung.

@@ -55,6 +55,8 @@ Connector-Aufruf begrenzt.
 Identischer Dateiinhalt wird bereits vor dem Kopieren in die Inbox über SHA-256 erkannt.
 Die Upload-Antwort verweist auf den vorhandenen Job und enthält `duplicate: true`; der
 Mehrfachupload zählt neue Dokumente, Duplikate und Fehler getrennt.
+Hash und Arbeitskopie entstehen in einem blockweisen Durchlauf über eine kurzlebige
+Staging-Datei. Dadurch wird die Dateigröße nicht vollständig im Arbeitsspeicher gehalten.
 
 Lokal:
 

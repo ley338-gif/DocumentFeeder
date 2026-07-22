@@ -1,5 +1,7 @@
 import hashlib
+import os
 import shutil
+import tempfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -35,39 +37,79 @@ class DocumentPipeline:
         self.rules = WorkflowRules(settings.require_routing_reference)
 
     def ingest(self, source_path: Path, source: str, original_filename: str | None = None) -> DocumentJob:
-        content_hash = hashlib.sha256(source_path.read_bytes()).hexdigest()
         filename = Path(original_filename or source_path.name).name
-        existing = self.store.find_by_hash(content_hash)
-        if existing is not None:
-            self._record_duplicate(existing, source, filename)
-            return existing.model_copy(update={"duplicate": True})
-        job = DocumentJob(
-            source=source,
-            original_filename=filename,
-            stored_path=self.settings.inbox_dir / f"{content_hash[:12]}-{filename}",
-            sha256=content_hash,
-            target_system_id=(
-                target.id
-                if (target := getattr(self.store, "get_default_target_system", lambda: None)())
-                else None
-            ),
-        )
-        shutil.copy2(source_path, job.stored_path)
-        persisted, created = self.store.create_if_absent(job)
-        if created:
-            self._event(
-                persisted,
-                "ingested",
-                "Dokument wurde angenommen",
-                status=JobStatus.RECEIVED,
-                details={"source": source, "filename": filename},
+        staged_path, content_hash = self._stage_and_hash(source_path)
+        try:
+            existing = self.store.find_by_hash(content_hash)
+            if existing is not None:
+                self._record_duplicate(existing, source, filename)
+                return existing.model_copy(update={"duplicate": True})
+            final_path = self.settings.inbox_dir / f"{content_hash[:12]}-{filename}"
+            job = DocumentJob(
+                source=source,
+                original_filename=filename,
+                stored_path=final_path,
+                sha256=content_hash,
+                target_system_id=(
+                    target.id
+                    if (
+                        target := getattr(
+                            self.store, "get_default_target_system", lambda: None
+                        )()
+                    )
+                    else None
+                ),
             )
-        else:
-            if job.stored_path != persisted.stored_path:
-                job.stored_path.unlink(missing_ok=True)
-            self._record_duplicate(persisted, source, filename)
-            persisted = persisted.model_copy(update={"duplicate": True})
-        return persisted
+            staged_path.replace(final_path)
+            staged_path = None
+            try:
+                persisted, created = self.store.create_if_absent(job)
+            except Exception:
+                referenced = self.store.find_by_hash(content_hash)
+                if referenced is None or referenced.stored_path != final_path:
+                    final_path.unlink(missing_ok=True)
+                raise
+            if created:
+                self._event(
+                    persisted,
+                    "ingested",
+                    "Dokument wurde angenommen",
+                    status=JobStatus.RECEIVED,
+                    details={"source": source, "filename": filename},
+                )
+            else:
+                if final_path != persisted.stored_path:
+                    final_path.unlink(missing_ok=True)
+                self._record_duplicate(persisted, source, filename)
+                persisted = persisted.model_copy(update={"duplicate": True})
+            return persisted
+        finally:
+            if staged_path is not None:
+                staged_path.unlink(missing_ok=True)
+
+    def _stage_and_hash(self, source_path: Path) -> tuple[Path, str]:
+        digest = hashlib.sha256()
+        staged_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="wb",
+                delete=False,
+                dir=self.settings.inbox_dir,
+                prefix=".ingest-",
+                suffix=".tmp",
+            ) as staged:
+                staged_path = Path(staged.name)
+                with source_path.open("rb") as source_file:
+                    while chunk := source_file.read(self.settings.ingest_chunk_size_bytes):
+                        digest.update(chunk)
+                        staged.write(chunk)
+                staged.flush()
+                os.fsync(staged.fileno())
+            return staged_path, digest.hexdigest()
+        except Exception:
+            if staged_path is not None:
+                staged_path.unlink(missing_ok=True)
+            raise
 
     def _record_duplicate(self, job: DocumentJob, source: str, filename: str) -> None:
         self._event(

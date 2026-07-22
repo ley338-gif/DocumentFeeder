@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,6 +18,7 @@ class Settings(BaseSettings):
     connector: str = "filesystem"
     require_routing_reference: bool = False
     tesseract_lang: str = "deu+eng"
+    ingest_chunk_size_bytes: int = Field(default=1024 * 1024, ge=4096, le=16 * 1024 * 1024)
 
     @property
     def inbox_dir(self) -> Path:

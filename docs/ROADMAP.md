@@ -22,7 +22,8 @@ Ziel: synthetisches Textdokument Ende-zu-Ende vom Eingang zum Dateisystem-Connec
 - persistentes Job- und Zustellprotokoll mit UI-Timeline (MVP umgesetzt)
 - Review-API/-UI für Quarantäne (MVP umgesetzt)
 - Authentisierung, Rollenmodell und produktionsfähiger Audit-Trail
-- PDF-Blackbox-Suite und Malware-Prüfung
+- PDF-Blackbox-Suite für beschädigte, leere, gedrehte, gemischte und übergroße PDFs (umgesetzt)
+- Malware-Prüfung
 - Observability und Betriebsmetriken
 
 ## M3 – KI-Dokumenttyp-Vorschläge (v0.3)

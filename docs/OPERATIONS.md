@@ -167,6 +167,9 @@ werden bei wiederholter Freigabe nicht erneut an den Connector gesendet.
 
 Verschlüsselte PDFs sowie PDFs oberhalb des Seitenlimits werden kontrolliert abgelehnt.
 Bild- und PDF-OCR sind durch Pixel- und Laufzeitlimits geschützt.
+Die automatisierte Blackbox-Suite deckt leere und abgeschnittene Dateien, verschlüsselte und
+gedrehte Seiten, gemischte Text-/Scan-Dokumente, Seitenlimits sowie übergroße Renderflächen ab.
+Sie verwendet ausschließlich zur Laufzeit erzeugte synthetische Dokumente.
 
 Die Pipeline hängt ausschließlich vom `DocumentExtractor`-Vertrag ab. Standardmäßig wird
 `DefaultDocumentExtractor` mit PDF-Text-Layer, seitenweisem Tesseract-Fallback und

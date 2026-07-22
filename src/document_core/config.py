@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     require_routing_reference: bool = False
     tesseract_lang: str = "deu+eng"
     ingest_chunk_size_bytes: int = Field(default=1024 * 1024, ge=4096, le=16 * 1024 * 1024)
+    max_file_size_bytes: int = Field(default=25 * 1024 * 1024, ge=1)
+    max_pdf_pages: int = Field(default=100, ge=1)
+    max_image_pixels: int = Field(default=40_000_000, ge=1)
+    ocr_timeout_seconds: int = Field(default=60, ge=1)
 
     @property
     def inbox_dir(self) -> Path:

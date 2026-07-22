@@ -27,6 +27,10 @@ Queue und Worker werden über folgende Variablen gesteuert:
 | `DOCUMENT_CORE_WORKER_LEASE_SECONDS` | `300` | Reservierungsdauer eines Jobs |
 | `DOCUMENT_CORE_WORKER_MAX_ATTEMPTS` | `3` | maximale technische Versuche |
 | `DOCUMENT_CORE_WORKER_RETRY_BASE_SECONDS` | `5` | Basis des exponentiellen Backoffs |
+| `DOCUMENT_CORE_MAX_FILE_SIZE_BYTES` | `26214400` | maximale Dateigröße für Upload und Hotfolder |
+| `DOCUMENT_CORE_MAX_PDF_PAGES` | `100` | maximale Seitenzahl pro PDF |
+| `DOCUMENT_CORE_MAX_IMAGE_PIXELS` | `40000000` | maximale Pixelzahl pro Bild/OCR-Render |
+| `DOCUMENT_CORE_OCR_TIMEOUT_SECONDS` | `60` | Zeitlimit je Tesseract-Aufruf |
 
 ```bash
 docker compose logs -f worker
@@ -46,6 +50,11 @@ Eingängen entfernt die Pipeline eine nicht benötigte zweite Arbeitskopie.
 Hashing und Staging erfolgen blockweise mit `DOCUMENT_CORE_INGEST_CHUNK_SIZE_BYTES`
 (Standard: 1 MiB). Verborgene `.ingest-*.tmp`-Dateien werden bei Duplikaten und Fehlern
 entfernt. Der Datenbank-Constraint auf `sha256` sichert parallele Eingänge zusätzlich ab.
+Während desselben Durchlaufs wird `DOCUMENT_CORE_MAX_FILE_SIZE_BYTES` erzwungen. Dateiendung
+und Inhaltssignatur werden für PDF, PNG, JPEG und TIFF abgeglichen; Klartextformate müssen
+UTF-8-lesbar sein. Nicht unterstützte oder falsch benannte Dateien bleiben im Hotfolder und
+werden über `last_error` sichtbar. Beim HTTP-Upload antwortet die API mit `413` (zu groß)
+oder `415` (nicht unterstützt/Endung passt nicht). Abgewiesene Dateien erzeugen keinen Job.
 
 Hotfolder werden persistent in der Datenbank gespeichert und in der Operator-Konsole unter
 **Eingangskanäle** verwaltet. Alternativ steht die API `/v1/input-channels` zur Verfügung.
@@ -155,6 +164,9 @@ Bearbeiter und Begründung; Dokumenttyp, Routing-Referenz und Metadaten sind opt
 werden bei wiederholter Freigabe nicht erneut an den Connector gesendet.
 
 ## PDF und OCR
+
+Verschlüsselte PDFs sowie PDFs oberhalb des Seitenlimits werden kontrolliert abgelehnt.
+Bild- und PDF-OCR sind durch Pixel- und Laufzeitlimits geschützt.
 
 Die Pipeline hängt ausschließlich vom `DocumentExtractor`-Vertrag ab. Standardmäßig wird
 `DefaultDocumentExtractor` mit PDF-Text-Layer, seitenweisem Tesseract-Fallback und

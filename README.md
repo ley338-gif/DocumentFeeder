@@ -55,6 +55,11 @@ Connector-Aufruf begrenzt.
 Identischer Dateiinhalt wird bereits vor dem Kopieren in die Inbox über SHA-256 erkannt.
 Die Upload-Antwort verweist auf den vorhandenen Job und enthält `duplicate: true`; der
 Mehrfachupload zählt neue Dokumente, Duplikate und Fehler getrennt.
+
+Uploads und Hotfolder verwenden dieselbe Sicherheitsprüfung: Unterstützt werden PDF,
+PNG, JPEG, TIFF sowie TXT, CSV, JSON und XML. Dateiendung und erkannter Inhalt müssen
+zusammenpassen. Konfigurierbare Limits begrenzen Dateigröße, PDF-Seiten, Bildpixel und
+OCR-Laufzeit; abgewiesene Dateien erzeugen keinen Job und keine Inbox-Arbeitskopie.
 Hash und Arbeitskopie entstehen in einem blockweisen Durchlauf über eine kurzlebige
 Staging-Datei. Dadurch wird die Dateigröße nicht vollständig im Arbeitsspeicher gehalten.
 

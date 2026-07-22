@@ -6,6 +6,7 @@ import pytest
 
 from document_core.config import Settings
 from document_core.connectors import FilesystemConnector
+from document_core.file_validation import FileTooLargeError
 from document_core.models import DeliveryRule, JobStatus, TargetSystem
 from document_core.pipeline import DocumentPipeline
 from document_core.store import JobStore
@@ -91,6 +92,22 @@ def test_ingest_hashes_and_copies_in_chunks(tmp_path: Path, monkeypatch):
     assert job.sha256 == hashlib.sha256(content).hexdigest()
     assert job.stored_path.read_text(encoding="utf-8").startswith("Bericht")
     assert not list(settings.inbox_dir.glob(".ingest-*.tmp"))
+
+
+def test_hotfolder_ingestion_enforces_size_limit_and_cleans_staging(tmp_path: Path):
+    settings = Settings(data_dir=tmp_path, max_file_size_bytes=8)
+    settings.create_directories()
+    source = tmp_path / "large.txt"
+    source.write_bytes(b"more than eight bytes")
+    pipeline = DocumentPipeline(
+        settings, JobStore("sqlite://"), FilesystemConnector(settings.output_dir)
+    )
+
+    with pytest.raises(FileTooLargeError, match="Limit"):
+        pipeline.ingest(source, "hotfolder:test")
+
+    assert source.exists()
+    assert list(settings.inbox_dir.iterdir()) == []
 
 
 def test_ingest_removes_staging_and_inbox_file_when_persistence_fails(

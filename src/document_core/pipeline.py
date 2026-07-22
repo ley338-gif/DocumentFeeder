@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .config import Settings
 from .connectors import FilesystemConnector, HttpConnector, TargetConnector
+from .file_validation import FileTooLargeError, detect_and_validate_type
 from .models import DocumentJob, JobEvent, JobStatus, ReviewEvent, ReviewRequest
 from .processing import (
     DefaultDocumentExtractor,
@@ -31,15 +32,21 @@ class DocumentPipeline:
         self.settings = settings
         self.store = store
         self.connector = connector
-        self.extractor = extractor or DefaultDocumentExtractor(settings.tesseract_lang)
+        self.extractor = extractor or DefaultDocumentExtractor(
+            settings.tesseract_lang,
+            max_pdf_pages=settings.max_pdf_pages,
+            max_image_pixels=settings.max_image_pixels,
+            ocr_timeout_seconds=settings.ocr_timeout_seconds,
+        )
         self.classifier = classifier or RuleBasedDocumentClassifier()
         self.processor = RuleBasedProcessor()
         self.rules = WorkflowRules(settings.require_routing_reference)
 
     def ingest(self, source_path: Path, source: str, original_filename: str | None = None) -> DocumentJob:
         filename = Path(original_filename or source_path.name).name
-        staged_path, content_hash = self._stage_and_hash(source_path)
+        staged_path, content_hash, size = self._stage_and_hash(source_path)
         try:
+            content_type = detect_and_validate_type(staged_path, filename)
             existing = self.store.find_by_hash(content_hash)
             if existing is not None:
                 self._record_duplicate(existing, source, filename)
@@ -50,6 +57,7 @@ class DocumentPipeline:
                 original_filename=filename,
                 stored_path=final_path,
                 sha256=content_hash,
+                metadata={"ingest_content_type": content_type, "ingest_size_bytes": size},
                 target_system_id=(
                     target.id
                     if (
@@ -87,8 +95,9 @@ class DocumentPipeline:
             if staged_path is not None:
                 staged_path.unlink(missing_ok=True)
 
-    def _stage_and_hash(self, source_path: Path) -> tuple[Path, str]:
+    def _stage_and_hash(self, source_path: Path) -> tuple[Path, str, int]:
         digest = hashlib.sha256()
+        size = 0
         staged_path: Path | None = None
         try:
             with tempfile.NamedTemporaryFile(
@@ -101,11 +110,17 @@ class DocumentPipeline:
                 staged_path = Path(staged.name)
                 with source_path.open("rb") as source_file:
                     while chunk := source_file.read(self.settings.ingest_chunk_size_bytes):
+                        size += len(chunk)
+                        if size > self.settings.max_file_size_bytes:
+                            raise FileTooLargeError(
+                                f"Datei überschreitet das Limit von "
+                                f"{self.settings.max_file_size_bytes} Bytes"
+                            )
                         digest.update(chunk)
                         staged.write(chunk)
                 staged.flush()
                 os.fsync(staged.fileno())
-            return staged_path, digest.hexdigest()
+            return staged_path, digest.hexdigest(), size
         except Exception:
             if staged_path is not None:
                 staged_path.unlink(missing_ok=True)
@@ -142,7 +157,9 @@ class DocumentPipeline:
             job.text_preview = clean_text[:500]
             classification = self.classifier.classify(clean_text)
             job.document_type = classification.document_type
+            ingest_metadata = job.metadata.copy()
             job.metadata = self.processor.extract_metadata(clean_text, job.document_type)
+            job.metadata.update(ingest_metadata)
             job.metadata["classification"] = classification.metadata()
             job.metadata.update(extraction.metadata())
             self._event(

@@ -88,6 +88,35 @@ def test_duplicate_upload_returns_existing_job_with_duplicate_marker(tmp_path: P
     assert not (tmp_path / "inbox" / f"{first['sha256'][:12]}-kopie.txt").exists()
 
 
+def test_upload_rejects_oversized_file_before_ingestion(tmp_path: Path, monkeypatch):
+    settings = configure_api(tmp_path, monkeypatch)
+    settings.max_file_size_bytes = 8
+
+    with TestClient(api_module.app) as client:
+        response = client.post(
+            "/v1/documents",
+            files={"file": ("large.txt", b"more than eight bytes", "text/plain")},
+        )
+
+    assert response.status_code == 413
+    assert api_module.store.list() == []
+    assert list(settings.inbox_dir.iterdir()) == []
+
+
+def test_upload_rejects_content_that_does_not_match_extension(tmp_path: Path, monkeypatch):
+    settings = configure_api(tmp_path, monkeypatch)
+
+    with TestClient(api_module.app) as client:
+        response = client.post(
+            "/v1/documents",
+            files={"file": ("fake.pdf", b"plain text", "application/pdf")},
+        )
+
+    assert response.status_code == 415
+    assert api_module.store.list() == []
+    assert list(settings.inbox_dir.iterdir()) == []
+
+
 def test_broken_pdf_fails_with_diagnostic_error(tmp_path: Path, monkeypatch):
     configure_api(tmp_path, monkeypatch)
     api_module.pipeline.settings.worker_retry_base_seconds = 0
@@ -95,7 +124,7 @@ def test_broken_pdf_fails_with_diagnostic_error(tmp_path: Path, monkeypatch):
     with TestClient(api_module.app) as client:
         response = client.post(
             "/v1/documents",
-            files={"file": ("broken.pdf", b"not a pdf", "application/pdf")},
+            files={"file": ("broken.pdf", b"%PDF-broken", "application/pdf")},
         )
 
     assert response.status_code == 202
@@ -208,7 +237,7 @@ def test_failed_job_can_be_requeued_from_api(tmp_path: Path, monkeypatch):
     with TestClient(api_module.app) as client:
         uploaded = client.post(
             "/v1/documents",
-            files={"file": ("broken.pdf", b"not a pdf", "application/pdf")},
+            files={"file": ("broken.pdf", b"%PDF-broken", "application/pdf")},
         ).json()
         failed = process_next_job()
         response = client.post(f"/v1/jobs/{uploaded['id']}/retry")
@@ -357,7 +386,7 @@ def test_failed_document_can_be_deleted_with_working_copy(tmp_path: Path, monkey
     with TestClient(api_module.app) as client:
         uploaded = client.post(
             "/v1/documents",
-            files={"file": ("delete-me.pdf", b"not a pdf", "application/pdf")},
+            files={"file": ("delete-me.pdf", b"%PDF-broken", "application/pdf")},
         ).json()
         failed = process_next_job()
         stored_path = failed.stored_path

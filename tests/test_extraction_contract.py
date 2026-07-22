@@ -32,7 +32,7 @@ def test_document_extractor_requires_an_implementation():
 def test_pipeline_uses_injected_document_extractor(tmp_path: Path):
     settings = Settings(data_dir=tmp_path)
     settings.create_directories()
-    source = tmp_path / "input.bin"
+    source = tmp_path / "input.txt"
     source.write_bytes(b"not readable by the default extractor")
     extractor = SyntheticExtractor()
     store = JobStore("sqlite://")

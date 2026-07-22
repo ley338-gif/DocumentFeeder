@@ -1,6 +1,5 @@
 import asyncio
 import fnmatch
-import shutil
 import tempfile
 from contextlib import asynccontextmanager, suppress
 from datetime import UTC, datetime
@@ -15,6 +14,7 @@ from sqlalchemy.exc import IntegrityError
 
 from .config import Settings
 from .connectors import FilesystemConnector
+from .file_validation import DocumentRejectedError, FileTooLargeError
 from .models import (
     DocumentJob,
     DeliveryRule,
@@ -310,13 +310,24 @@ def delete_delivery_rule(rule_id: str) -> Response:
 @app.post("/v1/documents", response_model=DocumentJob, status_code=202)
 def upload_document(file: UploadFile = File(...)) -> DocumentJob:
     safe_name = Path(file.filename or "document.bin").name
-    with tempfile.NamedTemporaryFile(delete=False, suffix=Path(safe_name).suffix) as temporary:
-        shutil.copyfileobj(file.file, temporary)
-        temporary_path = Path(temporary.name)
+    temporary_path: Path | None = None
     try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=Path(safe_name).suffix) as temporary:
+            temporary_path = Path(temporary.name)
+            size = 0
+            while chunk := file.file.read(settings.ingest_chunk_size_bytes):
+                size += len(chunk)
+                if size > settings.max_file_size_bytes:
+                    raise FileTooLargeError(
+                        f"Datei überschreitet das Limit von {settings.max_file_size_bytes} Bytes"
+                    )
+                temporary.write(chunk)
         return pipeline.ingest(temporary_path, "api", safe_name)
+    except DocumentRejectedError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     finally:
-        temporary_path.unlink(missing_ok=True)
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
 
 
 @app.get("/v1/jobs", response_model=JobListResponse)

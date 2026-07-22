@@ -13,6 +13,7 @@ Ziel: synthetisches Textdokument Ende-zu-Ende vom Eingang zum Dateisystem-Connec
 - PostgreSQL und atomare Delivery-Claims (umgesetzt)
 - Worker/Queue, Lease-Recovery und Retry (umgesetzt)
 - streamingbasierte Ingestion und aufräumsichere Deduplizierung (umgesetzt)
+- zentrale Datei-, PDF-, Bild- und OCR-Ressourcenlimits (umgesetzt)
 - Worker-Metriken, kontrolliertes Shutdown und administrativer Retry
 - Operator-Konsole für Übersicht, Vorschau, Review, Freigabe und Retry (MVP umgesetzt)
 - persistente Verwaltung mehrerer Hotfolder-Eingänge (MVP umgesetzt)
@@ -21,7 +22,7 @@ Ziel: synthetisches Textdokument Ende-zu-Ende vom Eingang zum Dateisystem-Connec
 - persistentes Job- und Zustellprotokoll mit UI-Timeline (MVP umgesetzt)
 - Review-API/-UI für Quarantäne (MVP umgesetzt)
 - Authentisierung, Rollenmodell und produktionsfähiger Audit-Trail
-- Upload-Limits und Malware-Prüfung
+- PDF-Blackbox-Suite und Malware-Prüfung
 - Observability und Betriebsmetriken
 
 ## M3 – KI-Dokumenttyp-Vorschläge (v0.3)

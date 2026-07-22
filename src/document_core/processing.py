@@ -35,8 +35,17 @@ class DefaultDocumentExtractor(DocumentExtractor):
 
     TEXT_SUFFIXES = {".txt", ".csv", ".json", ".xml"}
 
-    def __init__(self, language: str = "deu+eng"):
+    def __init__(
+        self,
+        language: str = "deu+eng",
+        max_pdf_pages: int = 100,
+        max_image_pixels: int = 40_000_000,
+        ocr_timeout_seconds: int = 60,
+    ):
         self.language = language
+        self.max_pdf_pages = max_pdf_pages
+        self.max_image_pixels = max_image_pixels
+        self.ocr_timeout_seconds = ocr_timeout_seconds
 
     MIN_NATIVE_TEXT_CHARACTERS = 20
 
@@ -54,11 +63,16 @@ class DefaultDocumentExtractor(DocumentExtractor):
             from pypdf import PdfReader
 
             reader = PdfReader(path)
+            if reader.is_encrypted and reader.decrypt("") == 0:
+                raise RuntimeError("PDF ist verschlüsselt und kann nicht verarbeitet werden")
         except Exception as exc:
             raise RuntimeError(f"PDF konnte nicht gelesen werden: {exc}") from exc
 
         if not reader.pages:
             raise RuntimeError("PDF enthält keine Seiten")
+
+        if len(reader.pages) > self.max_pdf_pages:
+            raise RuntimeError(f"PDF überschreitet das Limit von {self.max_pdf_pages} Seiten")
 
         texts: list[str] = []
         ocr_pages: list[int] = []
@@ -92,6 +106,12 @@ class DefaultDocumentExtractor(DocumentExtractor):
 
             document = pdfium.PdfDocument(path)
             page = document[zero_based_page]
+            width, height = page.get_size()
+            if int(width * 2.5) * int(height * 2.5) > self.max_image_pixels:
+                raise RuntimeError(
+                    f"Gerenderte PDF-Seite überschreitet das Limit von "
+                    f"{self.max_image_pixels} Pixeln"
+                )
             image = page.render(scale=2.5).to_pil()
             try:
                 return self._ocr_image(image)
@@ -114,10 +134,21 @@ class DefaultDocumentExtractor(DocumentExtractor):
                 from PIL import Image
 
                 with Image.open(image) as opened_image:
-                    return pytesseract.image_to_string(opened_image, lang=self.language)
-            return pytesseract.image_to_string(image, lang=self.language)
+                    self._validate_image_size(opened_image)
+                    return pytesseract.image_to_string(
+                        opened_image, lang=self.language, timeout=self.ocr_timeout_seconds
+                    )
+            self._validate_image_size(image)
+            return pytesseract.image_to_string(
+                image, lang=self.language, timeout=self.ocr_timeout_seconds
+            )
         except (ImportError, OSError) as exc:
             raise RuntimeError(f"OCR nicht verfügbar: {exc}") from exc
+
+    def _validate_image_size(self, image: Any) -> None:
+        width, height = image.size
+        if width * height > self.max_image_pixels:
+            raise RuntimeError(f"Bild überschreitet das Limit von {self.max_image_pixels} Pixeln")
 
 
 @dataclass(frozen=True)

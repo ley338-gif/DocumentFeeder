@@ -53,6 +53,9 @@ Staging-Datei in der Inbox und berechnet SHA-256 über exakt dieselben Bytes. Na
 Deduplizierungsprüfung wird die Staging-Datei atomar zum endgültigen Inbox-Pfad. Ein
 eindeutiger Datenbank-Constraint bleibt die letzte Absicherung bei parallelen Eingängen;
 Verlierer und Fehlerpfade entfernen ihre nicht referenzierten Dateien.
+Vor der Persistenz gelten zentral dieselben Größen- und Inhaltsregeln für API und Hotfolder.
+Die Verarbeitung begrenzt zusätzlich PDF-Seiten, Bildpixel und OCR-Laufzeit. Dadurch gelangen
+abgewiesene Eingaben weder in die Queue noch als dauerhafte Arbeitskopie in die Inbox.
 
 Jeder Job besitzt ID, Hash, Quelle, Originalname, Status, Metadaten, Fehler und Zeitstempel. Review-Entscheidungen werden mit Bearbeiter, Begründung und Änderungen protokolliert. Für Produktion sind Rollen/Rechte, Verschlüsselung, Aufbewahrung und Löschkonzepte vor Verarbeitung echter Fachdaten verpflichtend.
 
@@ -92,8 +95,8 @@ getrennt; Connector-spezifische Policies bestimmen, ob eine Routing-Referenz Pfl
 
 ## Nächste technische Grenzen
 
-- Als nächster Robustheitsschritt sollten Worker-Metriken, kontrolliertes Shutdown und
-  eine belastbare Fehleranzeige für Eingangskanäle ergänzt werden.
+- Als nächster Robustheitsschritt sollten eine PDF-Blackbox-Testsuite mit realistischen
+  Problemklassen sowie Worker-Metriken und kontrolliertes Shutdown ergänzt werden.
 - PDF-Text-Layer und mehrseitiger OCR-Fallback liegen hinter dem austauschbaren
   `DocumentExtractor`-Interface. Weitere OCR-Provider können per Dependency Injection
   ergänzt werden, ohne die Pipeline zu verändern.

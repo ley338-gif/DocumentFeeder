@@ -65,4 +65,14 @@ def test_viewer_has_read_only_access_and_no_user_management(tmp_path: Path, monk
         assert viewer.post("/v1/auth/login", json={"username": "viewer", "password": "viewer-test-password"}).status_code == 200
         assert viewer.get("/v1/jobs").status_code == 200
         assert viewer.get("/v1/users").status_code == 403
+        assert viewer.get("/v1/input-channels").status_code == 200
+        channel_id = viewer.get("/v1/input-channels").json()[0]["id"]
+        assert viewer.patch(
+            f"/v1/input-channels/{channel_id}", json={"enabled": False}
+        ).status_code == 403
         assert viewer.post("/v1/documents").status_code == 403
+        profile = viewer.patch("/v1/auth/me", json={"display_name": "Neuer Name"})
+        assert profile.status_code == 200
+        assert profile.json()["display_name"] == "Neuer Name"
+        assert viewer.post("/v1/auth/logout").status_code == 204
+        assert viewer.get("/v1/auth/me").status_code == 401

@@ -31,7 +31,18 @@
         <button class="nav-button" data-view="users" type="button">Benutzerverwaltung</button>
       </div>
     </nav>
-    <div class="system-state"><span id="health-dot" class="health-dot"></span><span id="health-text">System wird geprüft</span></div>
+    <div class="sidebar-footer">
+      <div class="system-state"><span id="health-dot" class="health-dot"></span><span id="health-text">System wird geprüft</span></div>
+      <div class="account-area">
+        <button id="account-button" class="account-button" type="button" aria-expanded="false"><span id="account-avatar" class="account-avatar">–</span><span><strong id="account-name">Nicht angemeldet</strong><small id="account-role">–</small></span><span class="account-chevron">⋯</span></button>
+        <div id="account-popover" class="account-popover hidden">
+          <div class="account-summary"><strong id="profile-username"></strong><span id="profile-role"></span></div>
+          <form id="profile-form" class="profile-form"><label>Anzeigename<input name="display_name" required maxlength="200"></label><label>Neues Passwort<input name="password" type="password" minlength="12" autocomplete="new-password" placeholder="Nur zum Ändern ausfüllen"></label><button class="button primary" type="submit">Profil speichern</button></form>
+          <p class="profile-hint">Persönliche Einstellungen folgen später.</p>
+          <button id="logout-button" class="button danger" type="button">Abmelden</button>
+        </div>
+      </div>
+    </div>
   </header>
 
   <main>

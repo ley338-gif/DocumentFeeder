@@ -36,6 +36,7 @@ from .models import (
     TargetSystemUpdate,
     TargetSystemView,
     LoginRequest,
+    ProfileUpdate,
     UserAccount,
     UserCreate,
     UserRole,
@@ -115,10 +116,14 @@ async def authorize(request: Request, call_next):
     if user is None:
         return JSONResponse({"detail": "Anmeldung erforderlich"}, status_code=401)
     request.state.user = user
-    admin_prefixes = ("/v1/users", "/v1/input-channels", "/v1/target-systems", "/v1/delivery-rules")
-    if path.startswith(admin_prefixes) and user.role != UserRole.ADMIN:
+    if path.startswith("/v1/users") and user.role != UserRole.ADMIN:
         return JSONResponse({"detail": "Administratorrechte erforderlich"}, status_code=403)
-    if request.method not in {"GET", "HEAD", "OPTIONS"} and user.role == UserRole.VIEWER:
+    configuration = ("/v1/input-channels", "/v1/target-systems", "/v1/delivery-rules")
+    safe_method = request.method in {"GET", "HEAD", "OPTIONS"}
+    if path.startswith(configuration) and not safe_method and user.role != UserRole.ADMIN:
+        return JSONResponse({"detail": "Administratorrechte erforderlich"}, status_code=403)
+    self_service = path in {"/v1/auth/me", "/v1/auth/logout"}
+    if not safe_method and user.role == UserRole.VIEWER and not self_service:
         return JSONResponse({"detail": "Nur Lesezugriff erlaubt"}, status_code=403)
     return await call_next(request)
 
@@ -143,6 +148,16 @@ def login(request: LoginRequest, response: Response) -> UserView:
 @app.get("/v1/auth/me", response_model=UserView)
 def current_user(request: Request) -> UserView:
     return user_view(request.state.user)
+
+
+@app.patch("/v1/auth/me", response_model=UserView)
+def update_profile(request: Request, profile: ProfileUpdate) -> UserView:
+    user = request.state.user
+    if profile.display_name is not None:
+        user.display_name = profile.display_name.strip()
+    if profile.password is not None:
+        user.password_hash = hash_password(profile.password)
+    return user_view(store.save_user(user))
 
 
 @app.post("/v1/auth/logout", status_code=204)

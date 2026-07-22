@@ -64,6 +64,11 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class ProfileUpdate(BaseModel):
+    display_name: str | None = Field(default=None, min_length=1, max_length=200)
+    password: str | None = Field(default=None, min_length=12, max_length=200)
+
+
 class RoutingReference(BaseModel):
     namespace: str = Field(min_length=1, max_length=100)
     type: str = Field(min_length=1, max_length=100)

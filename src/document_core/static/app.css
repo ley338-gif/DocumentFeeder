@@ -243,7 +243,21 @@ body { background: var(--paper); font-size: 14px; }
 }
 .nav-button:hover { color: #ededf0; background: #292a2f; }
 .nav-button.active { color: #fff; background: #303137; box-shadow: inset 2px 0 #7c85e8; }
-.system-state { margin-top: auto; padding: 12px 9px 3px; border-top: 1px solid #303137; color: #95969e; }
+.sidebar-footer { position: relative; margin-top: auto; border-top: 1px solid #303137; }
+.system-state { padding: 11px 9px 7px; color: #95969e; }
+.account-area { position: relative; }
+.account-button { width: 100%; display: grid; grid-template-columns: 30px 1fr auto; align-items: center; gap: 9px; padding: 8px; border: 0; border-radius: 7px; color: #eeeef1; background: transparent; text-align: left; }
+.account-button:hover { background: #292a2f; }
+.account-button strong, .account-button small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-button strong { font-size: 12px; }.account-button small { margin-top: 2px; color: #8d8e96; font-size: 10px; }
+.account-avatar { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 7px; color: white; background: #5e6ad2; font-size: 10px; font-weight: 700; }
+.account-chevron { color: #8d8e96; }
+.account-popover { position: absolute; left: 0; bottom: 52px; width: 300px; padding: 16px; border: 1px solid #dcdce1; border-radius: 9px; background: white; box-shadow: 0 18px 50px rgba(0,0,0,.25); color: var(--ink); }
+.account-summary { display: flex; justify-content: space-between; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }.account-summary span { color: var(--muted); font-size: 11px; }
+.profile-form { display: grid; gap: 10px; margin-top: 12px; }.profile-form label { display: grid; gap: 5px; color: var(--muted); font-size: 11px; }.profile-form input { padding: 9px; border: 1px solid var(--line); border-radius: 6px; }.profile-hint { color: var(--muted); font-size: 10px; }
+body.read-only-config #channels-view .channel-form-card, body.read-only-config #targets-view .channel-form-card, body.read-only-config #automation-view .channel-form-card, body.read-only-config #channels-view .channel-actions, body.read-only-config #targets-view .channel-actions, body.read-only-config #automation-view .channel-actions { display: none; }
+body.read-only-config #channels-view .channel-layout, body.read-only-config #targets-view .channel-layout, body.read-only-config #automation-view .channel-layout { grid-template-columns: 1fr; }
+body.viewer-mode .upload-button { display: none; }
 
 main { max-width: none; margin: 0 0 0 232px; padding: 34px 42px 56px; }
 .hero { align-items: center; margin-bottom: 24px; }

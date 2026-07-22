@@ -11,6 +11,7 @@ const documentTypeLabels = {
   invoice: "Rechnung", report: "Bericht", correspondence: "Korrespondenz",
   form: "Formular", unknown: "Nicht erkannt"
 };
+const roleLabels = { admin: "Administrator", operator: "Operator", viewer: "Betrachter" };
 const $ = (selector) => document.querySelector(selector);
 const esc = (value) => String(value ?? "—").replace(/[&<>'"]/g, (char) => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[char]));
 const formatTime = (value) => value ? new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value)) : "—";
@@ -111,10 +112,11 @@ function renderDetail(job) {
   state.selectedStatus = job.status;
   state.reviewDirty = false;
   const routing = job.routing_reference;
-  const canReview = job.status === "quarantined";
-  const canRelease = job.status === "quarantined";
-  const canRetry = job.status === "failed";
-  const canDelete = ["failed", "processing", "quarantined"].includes(job.status);
+  const canWrite = state.currentUser?.role !== "viewer";
+  const canReview = canWrite && job.status === "quarantined";
+  const canRelease = canWrite && job.status === "quarantined";
+  const canRetry = canWrite && job.status === "failed";
+  const canDelete = canWrite && ["failed", "processing", "quarantined"].includes(job.status);
   const previewUrl = `/v1/jobs/${job.id}/content`;
   const target = state.targets.find(item => item.id === job.target_system_id);
   const destination = job.metadata.destination_reference || "Wird bei Zustellung erzeugt";
@@ -351,16 +353,41 @@ async function loadUsers() {
 
 async function updateUser(id, body) { try { await api(`/v1/users/${id}`, {method:"PATCH", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)}); toast("Benutzer aktualisiert"); await loadUsers(); } catch (error) { toast(error.message, true); } }
 async function resetPassword(id) { const password = window.prompt("Neues Passwort (mindestens 12 Zeichen)"); if (!password) return; await updateUser(id, {password}); }
-async function createUser(event) { event.preventDefault(); const form = new FormData(event.currentTarget); try { await api("/v1/users", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(Object.fromEntries(form))}); event.currentTarget.reset(); toast("Benutzer angelegt"); await loadUsers(); } catch (error) { toast(error.message, true); } }
+async function createUser(event) { event.preventDefault(); const userForm = event.currentTarget; const form = new FormData(userForm); try { await api("/v1/users", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(Object.fromEntries(form))}); userForm.reset(); toast("Benutzer angelegt"); await loadUsers(); } catch (error) { toast(error.message, true); } }
 
 async function initializeSession() {
   try {
     state.currentUser = await api("/v1/auth/me");
     $("#login-screen").classList.add("hidden");
     if (state.currentUser.role === "admin") $("#admin-nav").classList.remove("hidden");
+    document.body.classList.toggle("read-only-config", state.currentUser.role !== "admin");
+    document.body.classList.toggle("viewer-mode", state.currentUser.role === "viewer");
+    renderAccount();
     loadTargets(); updatePathPreview(); refreshAll();
   } catch (_) { $("#login-screen").classList.remove("hidden"); }
 }
+
+function renderAccount() {
+  const user = state.currentUser;
+  $("#account-name").textContent = user.display_name;
+  $("#account-role").textContent = roleLabels[user.role] || user.role;
+  $("#account-avatar").textContent = user.display_name.trim().slice(0, 2).toUpperCase();
+  $("#profile-username").textContent = user.username;
+  $("#profile-role").textContent = roleLabels[user.role] || user.role;
+  $("#profile-form").elements.display_name.value = user.display_name;
+}
+
+async function saveProfile(event) {
+  event.preventDefault();
+  const profileForm = event.currentTarget;
+  const form = new FormData(profileForm);
+  const body = {display_name: form.get("display_name")};
+  if (form.get("password")) body.password = form.get("password");
+  try { state.currentUser = await api("/v1/auth/me", {method:"PATCH", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)}); profileForm.elements.password.value = ""; renderAccount(); toast("Profil gespeichert"); }
+  catch (error) { toast(error.message, true); }
+}
+
+async function logout() { try { await api("/v1/auth/logout", {method:"POST"}); window.location.reload(); } catch (error) { toast(error.message, true); } }
 
 async function login(event) {
   event.preventDefault(); const form = new FormData(event.currentTarget);
@@ -419,7 +446,8 @@ async function deleteTarget(id) {
 
 async function createTarget(event) {
   event.preventDefault();
-  const form = new FormData(event.currentTarget);
+  const targetForm = event.currentTarget;
+  const form = new FormData(targetForm);
   const kind = form.get("kind");
   const body = {
     name: form.get("name"), kind,
@@ -432,7 +460,7 @@ async function createTarget(event) {
   };
   try {
     await api("/v1/target-systems", {method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body)});
-    event.currentTarget.reset(); event.currentTarget.elements.enabled.checked = true; event.currentTarget.elements.timeout_seconds.value = 30;
+    targetForm.reset(); targetForm.elements.enabled.checked = true; targetForm.elements.timeout_seconds.value = 30;
     toast("Zielsystem angelegt"); await loadTargets();
   } catch (error) { toast(error.message, true); }
 }
@@ -462,9 +490,9 @@ async function deleteRule(id) {
 }
 
 async function createRule(event) {
-  event.preventDefault(); const form = new FormData(event.currentTarget);
+  event.preventDefault(); const ruleForm = event.currentTarget; const form = new FormData(ruleForm);
   const body = {name:form.get("name"), document_type:form.get("document_type"), target_system_id:form.get("target_system_id"), path_template:form.get("path_template") || null, priority:Number(form.get("priority")), enabled:form.get("enabled") === "on"};
-  try { await api("/v1/delivery-rules", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)}); event.currentTarget.reset(); event.currentTarget.elements.enabled.checked = true; event.currentTarget.elements.priority.value = 100; updatePathPreview(); toast("Ablageregel angelegt"); await loadRules(); }
+  try { await api("/v1/delivery-rules", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)}); ruleForm.reset(); ruleForm.elements.enabled.checked = true; ruleForm.elements.priority.value = 100; updatePathPreview(); toast("Ablageregel angelegt"); await loadRules(); }
   catch (error) { toast(error.message, true); }
 }
 
@@ -536,7 +564,8 @@ async function deleteChannel(id, name) {
 
 async function createChannel(event) {
   event.preventDefault();
-  const form = new FormData(event.currentTarget);
+  const channelForm = event.currentTarget;
+  const form = new FormData(channelForm);
   const body = {
     name: form.get("name"), directory: form.get("directory"),
     patterns: String(form.get("patterns")).split(",").map(value => value.trim()).filter(Boolean),
@@ -544,8 +573,8 @@ async function createChannel(event) {
   };
   try {
     await api("/v1/input-channels", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body) });
-    event.currentTarget.reset(); event.currentTarget.elements.enabled.checked = true;
-    event.currentTarget.elements.patterns.value = "*.pdf, *.txt";
+    channelForm.reset(); channelForm.elements.enabled.checked = true;
+    channelForm.elements.patterns.value = "*.pdf, *.txt";
     toast("Eingangskanal angelegt"); loadChannels();
   } catch (error) { toast(error.message, true); }
 }
@@ -569,6 +598,9 @@ $("#rule-form").addEventListener("submit", createRule);
 $("#user-form").addEventListener("submit", createUser);
 $("#reload-users").addEventListener("click", loadUsers);
 $("#login-form").addEventListener("submit", login);
+$("#profile-form").addEventListener("submit", saveProfile);
+$("#logout-button").addEventListener("click", logout);
+$("#account-button").addEventListener("click", () => { const popover = $("#account-popover"); popover.classList.toggle("hidden"); $("#account-button").setAttribute("aria-expanded", String(!popover.classList.contains("hidden"))); });
 $("#reload-rules").addEventListener("click", loadRules);
 $("#rule-path-template").addEventListener("input", updatePathPreview);
 document.querySelectorAll(".template-chips button").forEach(button => button.addEventListener("click", () => insertPathPlaceholder(button)));

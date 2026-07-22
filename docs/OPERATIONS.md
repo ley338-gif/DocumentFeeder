@@ -163,7 +163,9 @@ Start einer leeren Datenbank wird der Admin aus `DOCUMENT_CORE_BOOTSTRAP_ADMIN_U
 verwendet werden. Admins verwalten Benutzer, Rollen, Aktivstatus und Passwörter unter
 **Administration → Benutzerverwaltung**. Viewer dürfen ausschließlich lesen; Operatoren
 dürfen Dokumente bearbeiten, aber keine Benutzer-, Kanal-, Ziel- oder Regelkonfiguration
-ändern. Sitzungen laufen nach `DOCUMENT_CORE_SESSION_TTL_HOURS` ab.
+ändern. Konfigurationen bleiben für Viewer und Operatoren lesbar. Der angemeldete Benutzer
+wird unten in der Navigation mit Rolle angezeigt und kann dort Anzeigenamen und Passwort
+ändern oder sich abmelden. Sitzungen laufen nach `DOCUMENT_CORE_SESSION_TTL_HOURS` ab.
 
 Für einen TLS-Betrieb muss das Session-Cookie im nächsten Härtungsschritt zusätzlich als
 `Secure` konfiguriert und ein expliziter CSRF-Schutz ergänzt werden.

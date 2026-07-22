@@ -31,6 +31,10 @@ Queue und Worker werden über folgende Variablen gesteuert:
 | `DOCUMENT_CORE_MAX_PDF_PAGES` | `100` | maximale Seitenzahl pro PDF |
 | `DOCUMENT_CORE_MAX_IMAGE_PIXELS` | `40000000` | maximale Pixelzahl pro Bild/OCR-Render |
 | `DOCUMENT_CORE_OCR_TIMEOUT_SECONDS` | `60` | Zeitlimit je Tesseract-Aufruf |
+| `DOCUMENT_CORE_MALWARE_SCANNER` | `disabled` | `disabled` oder `clamav` |
+| `DOCUMENT_CORE_CLAMAV_HOST` | `clamav` | Hostname eines erreichbaren `clamd` |
+| `DOCUMENT_CORE_CLAMAV_PORT` | `3310` | TCP-Port von `clamd` |
+| `DOCUMENT_CORE_MALWARE_SCAN_TIMEOUT_SECONDS` | `30` | Verbindungs- und Antwortlimit |
 
 ```bash
 docker compose logs -f worker
@@ -55,6 +59,25 @@ und Inhaltssignatur werden für PDF, PNG, JPEG und TIFF abgeglichen; Klartextfor
 UTF-8-lesbar sein. Nicht unterstützte oder falsch benannte Dateien bleiben im Hotfolder und
 werden über `last_error` sichtbar. Beim HTTP-Upload antwortet die API mit `413` (zu groß)
 oder `415` (nicht unterstützt/Endung passt nicht). Abgewiesene Dateien erzeugen keinen Job.
+
+Mit `DOCUMENT_CORE_MALWARE_SCANNER=clamav` streamt Document Core die Staging-Datei über das
+ClamAV-`INSTREAM`-Protokoll, ohne einen zusätzlichen vollständigen Datei-Buffer anzulegen.
+Nur die Antwort `OK` wird akzeptiert. Ein Fund liefert HTTP `422`; ein nicht erreichbarer
+oder unerwartet antwortender Scanner liefert `503`. In beiden Fällen entstehen weder Job
+noch dauerhafte Inbox-Datei. Im Hotfolder bleibt die Quelldatei liegen und `last_error`
+enthält die Ursache. Der Standard `disabled` ist ausschließlich für Entwicklung gedacht;
+für produktive Eingänge muss ein gepflegter Scanner mit aktuellen Signaturen bereitstehen.
+
+Für die lokale Erprobung enthält Compose einen optionalen ClamAV-Dienst. In `.env` muss
+`DOCUMENT_CORE_MALWARE_SCANNER=clamav` gesetzt sein; danach wird das Profil gestartet:
+
+```bash
+docker compose --profile malware up -d
+docker compose logs -f clamav
+```
+
+Der erste Start kann wegen des Signaturdownloads mehrere Minuten benötigen. Bis `clamd`
+erreichbar ist, lehnt Document Core neue Eingänge mit `503` ab.
 
 Hotfolder werden persistent in der Datenbank gespeichert und in der Operator-Konsole unter
 **Eingangskanäle** verwaltet. Alternativ steht die API `/v1/input-channels` zur Verfügung.
@@ -136,7 +159,8 @@ und darf nur für einen bewusst bestätigten Entwicklungsreset verwendet werden.
 - Datenbank, Backups und Datenträger verschlüsseln.
 - Inhalte und personenbezogene Metadaten niemals in Standardlogs schreiben.
 - Audit-Trail, Löschfristen, Mandantentrennung und Auftragsverarbeitung klären.
-- Viren-/Dateitypprüfung, Größenlimits und Ressourcenlimits ergänzen.
+- ClamAV-Signaturupdates und Scanner-Verfügbarkeit überwachen; Dateityp-, Größen-, Malware-
+  und OCR-Ressourcenprüfungen sind technisch umgesetzt.
 - Bedrohungsmodell sowie Datenschutz-Folgenabschätzung durchführen.
 
 ## Fehleranalyse

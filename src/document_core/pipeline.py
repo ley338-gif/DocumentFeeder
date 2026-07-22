@@ -8,6 +8,7 @@ from pathlib import Path
 from .config import Settings
 from .connectors import FilesystemConnector, HttpConnector, TargetConnector
 from .file_validation import FileTooLargeError, detect_and_validate_type
+from .malware import MalwareScanner, create_malware_scanner
 from .models import DocumentJob, JobEvent, JobStatus, ReviewEvent, ReviewRequest
 from .processing import (
     DefaultDocumentExtractor,
@@ -28,6 +29,7 @@ class DocumentPipeline:
         connector: TargetConnector,
         extractor: DocumentExtractor | None = None,
         classifier: DocumentClassifier | None = None,
+        malware_scanner: MalwareScanner | None = None,
     ):
         self.settings = settings
         self.store = store
@@ -39,14 +41,23 @@ class DocumentPipeline:
             ocr_timeout_seconds=settings.ocr_timeout_seconds,
         )
         self.classifier = classifier or RuleBasedDocumentClassifier()
+        self.malware_scanner = malware_scanner or create_malware_scanner(
+            settings.malware_scanner,
+            settings.clamav_host,
+            settings.clamav_port,
+            settings.malware_scan_timeout_seconds,
+            settings.ingest_chunk_size_bytes,
+        )
         self.processor = RuleBasedProcessor()
         self.rules = WorkflowRules(settings.require_routing_reference)
+        self._last_event_at: dict[str, datetime] = {}
 
     def ingest(self, source_path: Path, source: str, original_filename: str | None = None) -> DocumentJob:
         filename = Path(original_filename or source_path.name).name
         staged_path, content_hash, size = self._stage_and_hash(source_path)
         try:
             content_type = detect_and_validate_type(staged_path, filename)
+            malware_scan = self.malware_scanner.scan(staged_path)
             existing = self.store.find_by_hash(content_hash)
             if existing is not None:
                 self._record_duplicate(existing, source, filename)
@@ -57,7 +68,11 @@ class DocumentPipeline:
                 original_filename=filename,
                 stored_path=final_path,
                 sha256=content_hash,
-                metadata={"ingest_content_type": content_type, "ingest_size_bytes": size},
+                metadata={
+                    "ingest_content_type": content_type,
+                    "ingest_size_bytes": size,
+                    "malware_scan": malware_scan.metadata(),
+                },
                 target_system_id=(
                     target.id
                     if (
@@ -376,6 +391,13 @@ class DocumentPipeline:
         started_at: datetime | None = None,
         completed_at: datetime | None = None,
     ) -> None:
+        event_started_at = started_at or datetime.now(UTC)
+        if previous := self._last_event_at.get(job.id):
+            if event_started_at <= previous:
+                event_started_at = previous + timedelta(microseconds=1)
+        self._last_event_at[job.id] = event_started_at
+        if completed_at is not None and completed_at < event_started_at:
+            completed_at = event_started_at
         getattr(self.store, "save_event")(
             JobEvent(
                 job_id=job.id,
@@ -389,7 +411,7 @@ class DocumentPipeline:
                 external_reference=external_reference,
                 error=error,
                 details=details or {},
-                started_at=started_at or datetime.now(UTC),
+                started_at=event_started_at,
                 completed_at=completed_at,
             )
         )

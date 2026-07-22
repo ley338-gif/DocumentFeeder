@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
-from sqlalchemy import JSON, DateTime, Integer, String, Text, and_, create_engine, delete, func, or_, select, update
+from sqlalchemy import JSON, DateTime, Integer, String, Text, and_, create_engine, delete, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -373,8 +373,8 @@ class JobStore:
                 select(JobEventRow)
                 .where(JobEventRow.job_id == job_id)
                 .order_by(
-                    func.coalesce(JobEventRow.completed_at, JobEventRow.started_at),
                     JobEventRow.started_at,
+                    JobEventRow.completed_at,
                     JobEventRow.id,
                 )
             ).all()

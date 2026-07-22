@@ -5,6 +5,8 @@ from fastapi.testclient import TestClient
 import document_core.api as api_module
 from document_core.config import Settings
 from document_core.connectors import FilesystemConnector
+from document_core.file_validation import MalwareDetectedError
+from document_core.malware import MalwareScanner
 from document_core.models import JobStatus
 from document_core.pipeline import DocumentPipeline
 from document_core.store import JobStore
@@ -113,6 +115,27 @@ def test_upload_rejects_content_that_does_not_match_extension(tmp_path: Path, mo
         )
 
     assert response.status_code == 415
+    assert api_module.store.list() == []
+    assert list(settings.inbox_dir.iterdir()) == []
+
+
+def test_upload_returns_rejection_from_malware_scanner(tmp_path: Path, monkeypatch):
+    settings = configure_api(tmp_path, monkeypatch)
+
+    class RejectingScanner(MalwareScanner):
+        def scan(self, path: Path):
+            raise MalwareDetectedError("Malware erkannt: Test-Signatur")
+
+    api_module.pipeline.malware_scanner = RejectingScanner()
+
+    with TestClient(api_module.app) as client:
+        response = client.post(
+            "/v1/documents",
+            files={"file": ("infected.txt", b"synthetic content", "text/plain")},
+        )
+
+    assert response.status_code == 422
+    assert "Test-Signatur" in response.json()["detail"]
     assert api_module.store.list() == []
     assert list(settings.inbox_dir.iterdir()) == []
 

@@ -23,7 +23,8 @@ Ziel: synthetisches Textdokument Ende-zu-Ende vom Eingang zum Dateisystem-Connec
 - Review-API/-UI für Quarantäne (MVP umgesetzt)
 - Authentisierung, Rollenmodell und produktionsfähiger Audit-Trail
 - PDF-Blackbox-Suite für beschädigte, leere, gedrehte, gemischte und übergroße PDFs (umgesetzt)
-- Malware-Prüfung
+- providerneutrale Malware-Prüfung und ClamAV-Streaming-Adapter (umgesetzt)
+- produktiver ClamAV-Betrieb mit Signaturupdates und Monitoring
 - Observability und Betriebsmetriken
 
 ## M3 – KI-Dokumenttyp-Vorschläge (v0.3)

@@ -71,5 +71,15 @@ services:
       timeout: 3s
       retries: 10
 
+  clamav:
+    image: clamav/clamav:stable
+    profiles: ["malware"]
+    expose:
+      - "3310"
+    volumes:
+      - document-core-clamav-db:/var/lib/clamav
+    restart: unless-stopped
+
 volumes:
   document-core-db:
+  document-core-clamav-db:

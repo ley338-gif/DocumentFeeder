@@ -13,6 +13,14 @@ class UnsupportedFileTypeError(DocumentRejectedError):
     status_code = 415
 
 
+class MalwareDetectedError(DocumentRejectedError):
+    status_code = 422
+
+
+class MalwareScannerUnavailableError(DocumentRejectedError):
+    status_code = 503
+
+
 SUPPORTED_TYPES = {
     ".pdf": "application/pdf",
     ".png": "image/png",

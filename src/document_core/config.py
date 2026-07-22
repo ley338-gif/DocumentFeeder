@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     max_pdf_pages: int = Field(default=100, ge=1)
     max_image_pixels: int = Field(default=40_000_000, ge=1)
     ocr_timeout_seconds: int = Field(default=60, ge=1)
+    malware_scanner: str = "disabled"
+    clamav_host: str = "clamav"
+    clamav_port: int = Field(default=3310, ge=1, le=65535)
+    malware_scan_timeout_seconds: float = Field(default=30, gt=0)
 
     @property
     def inbox_dir(self) -> Path:

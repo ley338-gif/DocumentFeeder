@@ -56,6 +56,9 @@ Verlierer und Fehlerpfade entfernen ihre nicht referenzierten Dateien.
 Vor der Persistenz gelten zentral dieselben Größen- und Inhaltsregeln für API und Hotfolder.
 Die Verarbeitung begrenzt zusätzlich PDF-Seiten, Bildpixel und OCR-Laufzeit. Dadurch gelangen
 abgewiesene Eingaben weder in die Queue noch als dauerhafte Arbeitskopie in die Inbox.
+Zwischen Dateitypprüfung und Persistenz liegt der providerneutrale `MalwareScanner`. Der
+ClamAV-Adapter streamt dieselbe Staging-Datei an `clamd` und arbeitet bei aktiver Konfiguration
+fail-closed: Fund, Verbindungsfehler oder unbekannte Antwort verhindern die Jobanlage.
 
 Jeder Job besitzt ID, Hash, Quelle, Originalname, Status, Metadaten, Fehler und Zeitstempel. Review-Entscheidungen werden mit Bearbeiter, Begründung und Änderungen protokolliert. Für Produktion sind Rollen/Rechte, Verschlüsselung, Aufbewahrung und Löschkonzepte vor Verarbeitung echter Fachdaten verpflichtend.
 

@@ -60,6 +60,8 @@ Uploads und Hotfolder verwenden dieselbe Sicherheitsprüfung: Unterstützt werde
 PNG, JPEG, TIFF sowie TXT, CSV, JSON und XML. Dateiendung und erkannter Inhalt müssen
 zusammenpassen. Konfigurierbare Limits begrenzen Dateigröße, PDF-Seiten, Bildpixel und
 OCR-Laufzeit; abgewiesene Dateien erzeugen keinen Job und keine Inbox-Arbeitskopie.
+Optional kann dieselbe Eingangsstufe Dateien über einen ClamAV-Dienst prüfen. Der Scanner
+ist standardmäßig deaktiviert und wird über `DOCUMENT_CORE_MALWARE_SCANNER=clamav` aktiviert.
 Hash und Arbeitskopie entstehen in einem blockweisen Durchlauf über eine kurzlebige
 Staging-Datei. Dadurch wird die Dateigröße nicht vollständig im Arbeitsspeicher gehalten.
 

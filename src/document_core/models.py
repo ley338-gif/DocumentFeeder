@@ -98,6 +98,13 @@ class AuditCleanupResult(BaseModel):
     cutoff: datetime
 
 
+class AuditIntegrityStatus(BaseModel):
+    status: str
+    checked: int
+    first_invalid_index: int | None = None
+    detail: str | None = None
+
+
 class RoutingReference(BaseModel):
     namespace: str = Field(min_length=1, max_length=100)
     type: str = Field(min_length=1, max_length=100)

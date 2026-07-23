@@ -32,6 +32,7 @@ from .models import (
     DocumentJob,
     AuditEvent,
     AuditCleanupResult,
+    AuditIntegrityStatus,
     AuditListResponse,
     AuditRetentionSettings,
     DeliveryRule,
@@ -122,12 +123,18 @@ async def enforce_audit_retention() -> None:
                 status_code=200,
                 details={"deleted": deleted, "cutoff": cutoff.isoformat()},
             ))
+        integrity = store.verify_audit_chain()
+        store.set_system_setting(
+            "audit_integrity_status",
+            json.dumps(integrity, ensure_ascii=False, separators=(",", ":")),
+        )
         await asyncio.sleep(24 * 60 * 60)
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     store.migrate_or_rotate_target_secrets()
+    store.initialize_audit_chain()
     store.ensure_installation_id()
     if settings.auth_enabled and not store.list_users():
         if not settings.bootstrap_admin_password:
@@ -411,6 +418,16 @@ def cleanup_audit_events() -> AuditCleanupResult:
     return AuditCleanupResult(deleted=deleted, cutoff=cutoff)
 
 
+@app.get("/v1/audit-events/integrity", response_model=AuditIntegrityStatus)
+def verify_audit_integrity() -> AuditIntegrityStatus:
+    result = store.verify_audit_chain()
+    store.set_system_setting(
+        "audit_integrity_status",
+        json.dumps(result, ensure_ascii=False, separators=(",", ":")),
+    )
+    return AuditIntegrityStatus(**result)
+
+
 @app.get("/v1/system-status")
 def system_status() -> dict:
     now = datetime.now(UTC)
@@ -438,10 +455,22 @@ def system_status() -> dict:
     }
     malware.update({"enabled": scanning_enabled, "controllable": scanner_configured})
     database_ok = store.healthcheck()
+    try:
+        audit_integrity = json.loads(
+            store.get_system_setting("audit_integrity_status", "{}") or "{}"
+        )
+    except json.JSONDecodeError:
+        audit_integrity = {}
+    audit_integrity.setdefault("status", "unknown")
     target_errors = [target for target in targets if target.last_error]
     channel_errors = [channel for channel in channels if channel.last_error]
     status = "ok"
-    if not database_ok or not active_workers or malware["status"] == "error":
+    if (
+        not database_ok
+        or not active_workers
+        or malware["status"] == "error"
+        or audit_integrity["status"] == "invalid"
+    ):
         status = "error"
     elif (
         target_errors or channel_errors or (scanner_configured and not scanning_enabled)
@@ -457,6 +486,7 @@ def system_status() -> dict:
             "api": {"status": "ok"},
             "database": {"status": "ok" if database_ok else "error"},
             "malware_scanner": malware,
+            "audit_trail": audit_integrity,
         },
         "queue": {
             "waiting": len(waiting),

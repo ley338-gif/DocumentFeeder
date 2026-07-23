@@ -76,6 +76,7 @@ def test_audit_search_export_and_retention(tmp_path: Path, monkeypatch):
             "/v1/audit-events/retention", json={"retention_days": 180}
         )
         export = client.get("/v1/audit-events/export", params={"outcome": "failure"})
+        integrity = client.get("/v1/audit-events/integrity")
 
     assert first.json()["total"] == 3
     assert len(first.json()["items"]) == 2
@@ -87,6 +88,8 @@ def test_audit_search_export_and_retention(tmp_path: Path, monkeypatch):
     assert "created_at,actor_username,action" in csv_text
     assert "TEST_1" in csv_text
     assert "TEST_0" not in csv_text
+    assert integrity.json()["status"] == "ok"
+    assert integrity.json()["checked"] >= 5
 
 
 def test_pdf_upload_reaches_connector_through_http_api(tmp_path: Path, monkeypatch):

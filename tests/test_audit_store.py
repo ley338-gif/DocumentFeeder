@@ -1,7 +1,9 @@
 from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import update
+
 from document_core.models import AuditEvent
-from document_core.store import JobStore
+from document_core.store import AuditEventRow, JobStore
 
 
 def event(index: int, created_at: datetime) -> AuditEvent:
@@ -40,3 +42,23 @@ def test_audit_retention_deletes_only_expired_events():
 
     assert deleted == 1
     assert [item.action for item in store.list_audit_events()] == ["UPDATE_2"]
+    assert store.verify_audit_chain()["status"] == "ok"
+
+
+def test_audit_hash_chain_detects_modified_entry():
+    store = JobStore("sqlite://")
+    now = datetime.now(UTC)
+    store.save_audit_event(event(1, now))
+    store.save_audit_event(event(2, now + timedelta(seconds=1)))
+    assert store.verify_audit_chain()["status"] == "ok"
+
+    with store.sessions.begin() as session:
+        session.execute(
+            update(AuditEventRow)
+            .where(AuditEventRow.chain_index == 1)
+            .values(details={"modified": True})
+        )
+
+    result = store.verify_audit_chain()
+    assert result["status"] == "invalid"
+    assert result["first_invalid_index"] == 1

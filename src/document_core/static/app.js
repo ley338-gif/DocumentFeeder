@@ -350,12 +350,12 @@ function switchView(view, sourceButton = null) {
   if (view === "targets") loadTargets();
   if (view === "automation") loadRules();
   if (view === "users") loadUsers();
-  if (view === "audit") { loadAuditEvents(); loadAuditRetention(); }
+  if (view === "audit") { loadAuditEvents(); loadAuditRetention(); verifyAuditIntegrity(false); }
   if (view === "system") loadSystemStatus();
   if (view === "license") loadLicense();
 }
 
-function statusLabel(status) { return status === "ok" ? "Bereit" : status === "disabled" ? "Deaktiviert" : status === "paused" ? "Pausiert" : status === "stale" ? "Veraltet" : status === "warning" ? "Warnung" : "Fehler"; }
+function statusLabel(status) { return status === "ok" ? "Bereit" : status === "disabled" ? "Deaktiviert" : status === "paused" ? "Pausiert" : status === "stale" ? "Veraltet" : status === "warning" ? "Warnung" : status === "unknown" ? "Ungeprüft" : "Fehler"; }
 
 async function loadSystemStatus() {
   try {
@@ -369,9 +369,9 @@ async function loadSystemStatus() {
       ["Aktive Worker", result.workers.filter(worker => worker.status === "ok").length, result.workers.some(worker => worker.status === "ok") ? "ok" : "error"]
     ];
     $("#system-summary").innerHTML = cards.map(card => `<article class="system-card ${card[2]}"><span>${card[0]}</span><strong>${card[1]}</strong></article>`).join("");
-    const serviceNames = {api: "API", database: "Datenbank", malware_scanner: "Malware-Schutz"};
+    const serviceNames = {api: "API", database: "Datenbank", malware_scanner: "Malware-Schutz", audit_trail: "Audit-Integrität"};
     const services = Object.entries(result.services).map(([name, service]) => {
-      const badge = `<span class="badge ${service.status === "ok" ? "delivered" : ["disabled", "paused"].includes(service.status) ? "received" : "failed"}">${statusLabel(service.status)}</span>`;
+      const badge = `<span class="badge ${service.status === "ok" ? "delivered" : ["disabled", "paused", "unknown"].includes(service.status) ? "received" : "failed"}">${statusLabel(service.status)}</span>`;
       const control = name === "malware_scanner" && service.controllable ? `<button id="toggle-malware" class="button" data-enabled="${service.enabled}" type="button">${service.enabled ? "Prüfung pausieren" : "Prüfung aktivieren"}</button>` : "";
       return `<div class="system-line"><span>${serviceNames[name] || esc(name.replaceAll("_", " "))}</span><span class="system-actions">${badge}${control}</span></div>`;
     }).join("");
@@ -432,6 +432,24 @@ async function cleanupAudit() {
     state.auditOffset = 0;
     toast(`${result.deleted} ältere Einträge gelöscht`);
     await loadAuditEvents();
+  } catch (error) { toast(error.message, true); }
+}
+
+async function verifyAuditIntegrity(showMessage = true) {
+  try {
+    const result = await api("/v1/audit-events/integrity");
+    const valid = result.status === "ok";
+    const badge = $("#audit-integrity-badge");
+    badge.className = `badge ${valid ? "delivered" : "failed"}`;
+    badge.textContent = valid
+      ? `Integrität bestätigt · ${result.checked} Einträge`
+      : `Kette beschädigt · Position ${result.first_invalid_index ?? "unbekannt"}`;
+    if (showMessage) {
+      toast(
+        valid ? "Audit-Integrität erfolgreich geprüft" : result.detail,
+        !valid
+      );
+    }
   } catch (error) { toast(error.message, true); }
 }
 
@@ -800,6 +818,7 @@ $("#audit-previous").addEventListener("click", () => { state.auditOffset = Math.
 $("#audit-next").addEventListener("click", () => { state.auditOffset += state.auditLimit; loadAuditEvents(); });
 $("#audit-retention-form").addEventListener("submit", saveAuditRetention);
 $("#cleanup-audit").addEventListener("click", cleanupAudit);
+$("#verify-audit").addEventListener("click", () => verifyAuditIntegrity(true));
 $("#export-audit").addEventListener("click", exportAudit);
 $("#reload-system").addEventListener("click", loadSystemStatus);
 $("#license-form").addEventListener("submit", activateLicense);

@@ -26,7 +26,7 @@ Ziel: synthetisches Textdokument Ende-zu-Ende vom Eingang zum Dateisystem-Connec
 - lokale Authentisierung, Rollenmodell und Admin-Benutzerverwaltung (MVP umgesetzt)
 - CSRF-Schutz, Login-Drosselung, sichere Cookie-Option und Sitzungsentzug (umgesetzt)
 - zentrales Systemprotokoll mit Benutzer-, Aktions- und Ergebnisfiltern (MVP umgesetzt)
-- SQL-Suche, Pagination, CSV-Export und Aufbewahrung für den Audit-Trail (umgesetzt); kryptografischer Manipulationsschutz offen
+- SQL-Suche, Pagination, CSV-Export, Aufbewahrung und Hashkette für den Audit-Trail (umgesetzt); externer Kettenanker offen
 - PDF-Blackbox-Suite für beschädigte, leere, gedrehte, gemischte und übergroße PDFs (umgesetzt)
 - providerneutrale Malware-Prüfung und ClamAV-Streaming-Adapter (umgesetzt)
 - produktiver ClamAV-Betrieb mit Signaturupdates und Monitoring

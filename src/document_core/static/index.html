@@ -196,7 +196,7 @@
       <section class="hero channel-hero"><div><p class="eyebrow">Administration</p><h1>Systemprotokoll</h1><p class="hero-copy">Anmeldungen und Änderungen übergreifend nachvollziehen.</p></div></section>
       <section class="audit-actions">
         <form id="audit-retention-form" class="retention-form"><label>Aufbewahrung<input name="retention_days" type="number" min="30" max="3650" value="365"><span>Tage</span></label><button class="button" type="submit">Speichern</button><button id="cleanup-audit" class="button danger" type="button">Jetzt bereinigen</button></form>
-        <button id="export-audit" class="button" type="button">CSV exportieren</button>
+        <div class="audit-integrity"><span id="audit-integrity-badge" class="badge received">Integrität unbekannt</span><button id="verify-audit" class="button" type="button">Integrität prüfen</button><button id="export-audit" class="button" type="button">CSV exportieren</button></div>
       </section>
       <section class="audit-panel">
         <div class="toolbar audit-toolbar"><label class="search"><span class="sr-only">Protokoll durchsuchen</span><input id="audit-search" type="search" placeholder="Benutzer, Aktion oder Objekt"></label><select id="audit-outcome"><option value="">Alle Ergebnisse</option><option value="success">Erfolgreich</option><option value="failure">Fehlgeschlagen</option></select><button id="reload-audit" class="icon-button" type="button">↻</button></div>

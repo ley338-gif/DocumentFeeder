@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import os
+import hashlib
+import json
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
 from uuid import uuid4
 
-from sqlalchemy import JSON, DateTime, Integer, String, Text, and_, create_engine, delete, func, inspect, or_, select, text, update
+from sqlalchemy import JSON, BigInteger, DateTime, Integer, String, Text, and_, create_engine, delete, func, inspect, or_, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -181,6 +183,9 @@ class AuditEventRow(Base):
     status_code: Mapped[int] = mapped_column(Integer, nullable=False)
     details: Mapped[dict] = mapped_column(JSON, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    chain_index: Mapped[int | None] = mapped_column(BigInteger, unique=True, index=True)
+    previous_hash: Mapped[str | None] = mapped_column(String(64))
+    entry_hash: Mapped[str | None] = mapped_column(String(64), unique=True)
 
 
 class WorkerHeartbeatRow(Base):
@@ -220,6 +225,7 @@ class JobStore:
         if create_schema:
             Base.metadata.create_all(self.engine)
             self.migrate_or_rotate_target_secrets()
+            self.initialize_audit_chain()
 
     def migrate_or_rotate_target_secrets(self) -> None:
         if "target_systems" not in inspect(self.engine).get_table_names():
@@ -551,11 +557,154 @@ class JobStore:
                 failures += 1
             return failures
 
+    @staticmethod
+    def _audit_hash(previous_hash: str, values: dict) -> str:
+        created_at = values["created_at"]
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=UTC)
+        canonical = {
+            "id": values["id"],
+            "actor_user_id": values.get("actor_user_id"),
+            "actor_username": values["actor_username"],
+            "action": values["action"],
+            "resource_type": values["resource_type"],
+            "resource_id": values.get("resource_id"),
+            "outcome": values["outcome"],
+            "status_code": values["status_code"],
+            "details": values["details"],
+            "created_at": created_at.astimezone(UTC).isoformat(timespec="microseconds"),
+        }
+        payload = json.dumps(
+            canonical, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        )
+        return hashlib.sha256(f"{previous_hash}\n{payload}".encode()).hexdigest()
+
+    @staticmethod
+    def _audit_row_values(row: AuditEventRow) -> dict:
+        return {
+            key: getattr(row, key) for key in (
+                "id", "actor_user_id", "actor_username", "action", "resource_type",
+                "resource_id", "outcome", "status_code", "details", "created_at",
+            )
+        }
+
+    @staticmethod
+    def _session_setting(session, key: str, default: str = "") -> str:
+        row = session.get(SystemSettingRow, key)
+        return row.value if row else default
+
+    @staticmethod
+    def _set_session_setting(session, key: str, value: str) -> None:
+        row = session.get(SystemSettingRow, key)
+        if row is None:
+            session.add(
+                SystemSettingRow(key=key, value=value, updated_at=datetime.now(UTC))
+            )
+        else:
+            row.value = value
+            row.updated_at = datetime.now(UTC)
+
+    def _lock_audit_chain(self, session) -> None:
+        if self.engine.dialect.name == "postgresql":
+            session.execute(text("SELECT pg_advisory_xact_lock(823746123)"))
+
+    def initialize_audit_chain(self) -> None:
+        if "audit_events" not in inspect(self.engine).get_table_names():
+            return
+        columns = {item["name"] for item in inspect(self.engine).get_columns("audit_events")}
+        if "entry_hash" not in columns:
+            return
+        with self.sessions.begin() as session:
+            self._lock_audit_chain(session)
+            rows = session.scalars(
+                select(AuditEventRow).order_by(
+                    AuditEventRow.created_at, AuditEventRow.id
+                )
+            ).all()
+            if not rows or any(row.entry_hash for row in rows):
+                return
+            previous_hash = self._session_setting(
+                session, "audit_chain_anchor_hash", "0" * 64
+            )
+            chain_index = int(self._session_setting(
+                session, "audit_chain_anchor_index", "0"
+            ))
+            for row in rows:
+                chain_index += 1
+                row.chain_index = chain_index
+                row.previous_hash = previous_hash
+                row.entry_hash = self._audit_hash(
+                    previous_hash, self._audit_row_values(row)
+                )
+                previous_hash = row.entry_hash
+
     def save_audit_event(self, event: AuditEvent) -> AuditEvent:
         event.details = self.redact(event.details)
         with self.sessions.begin() as session:
-            session.add(AuditEventRow(**event.model_dump()))
+            self._lock_audit_chain(session)
+            last = session.scalar(
+                select(AuditEventRow)
+                .where(AuditEventRow.chain_index.is_not(None))
+                .order_by(AuditEventRow.chain_index.desc())
+                .limit(1)
+                .with_for_update()
+            )
+            if last:
+                previous_hash = last.entry_hash or "0" * 64
+                chain_index = (last.chain_index or 0) + 1
+            else:
+                previous_hash = self._session_setting(
+                    session, "audit_chain_anchor_hash", "0" * 64
+                )
+                chain_index = int(self._session_setting(
+                    session, "audit_chain_anchor_index", "0"
+                )) + 1
+            values = event.model_dump()
+            entry_hash = self._audit_hash(previous_hash, values)
+            session.add(AuditEventRow(
+                **values,
+                chain_index=chain_index,
+                previous_hash=previous_hash,
+                entry_hash=entry_hash,
+            ))
         return event
+
+    def verify_audit_chain(self) -> dict:
+        with self.sessions() as session:
+            previous_hash = self._session_setting(
+                session, "audit_chain_anchor_hash", "0" * 64
+            )
+            expected_index = int(self._session_setting(
+                session, "audit_chain_anchor_index", "0"
+            )) + 1
+            checked = 0
+            rows = session.scalars(
+                select(AuditEventRow).order_by(AuditEventRow.chain_index)
+            )
+            for row in rows:
+                expected_hash = self._audit_hash(
+                    previous_hash, self._audit_row_values(row)
+                )
+                if (
+                    row.chain_index != expected_index
+                    or row.previous_hash != previous_hash
+                    or row.entry_hash != expected_hash
+                ):
+                    return {
+                        "status": "invalid",
+                        "checked": checked,
+                        "first_invalid_index": row.chain_index,
+                        "detail": "Audit-Hashkette ist unterbrochen oder verändert",
+                    }
+                checked += 1
+                expected_index += 1
+                previous_hash = row.entry_hash or ""
+            return {
+                "status": "ok",
+                "checked": checked,
+                "first_invalid_index": None,
+                "detail": None,
+            }
 
     def list_audit_events(self) -> list[AuditEvent]:
         items, _ = self.search_audit_events(limit=10000)
@@ -622,8 +771,31 @@ class JobStore:
 
     def delete_audit_events_before(self, cutoff: datetime) -> int:
         with self.sessions.begin() as session:
+            self._lock_audit_chain(session)
+            first_retained = session.scalar(
+                select(AuditEventRow)
+                .where(AuditEventRow.created_at >= cutoff)
+                .order_by(AuditEventRow.chain_index)
+                .limit(1)
+            )
+            boundary = (first_retained.chain_index - 1) if first_retained else session.scalar(
+                select(func.max(AuditEventRow.chain_index))
+            )
+            if not boundary:
+                return 0
+            anchor = session.scalar(
+                select(AuditEventRow).where(AuditEventRow.chain_index == boundary)
+            )
+            if anchor is None:
+                return 0
+            self._set_session_setting(
+                session, "audit_chain_anchor_hash", anchor.entry_hash or "0" * 64
+            )
+            self._set_session_setting(
+                session, "audit_chain_anchor_index", str(anchor.chain_index or 0)
+            )
             result = session.execute(
-                delete(AuditEventRow).where(AuditEventRow.created_at < cutoff)
+                delete(AuditEventRow).where(AuditEventRow.chain_index <= boundary)
             )
             return result.rowcount or 0
 

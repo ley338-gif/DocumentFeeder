@@ -33,10 +33,20 @@ die bestehende Audit-Middleware protokolliert.
 Standardwert: 365 Tage. Die Konfiguration wird in `system_settings` gespeichert und benötigt
 keine zusätzliche Datenbankmigration.
 
-## Noch offen
+## Manipulationserkennung
 
-Die aktuelle Härtung verhindert unbegrenztes Wachstum und reduziert unnötige Datenhaltung.
-Kryptografischer Manipulationsschutz – beispielsweise eine Hash-Verkettung mit extern
-gesichertem Anker – bleibt ein separater Produktionsschritt. Datenbank-Admins können bestehende
-Einträge derzeit technisch verändern; Rollen- und API-Schutz ersetzen keinen unveränderbaren
-externen Audit-Speicher.
+Jeder Eintrag enthält einen SHA-256-Hash über seine fachlichen Felder und den Hash des
+vorherigen Eintrags. Eine fortlaufende Kettenposition erkennt zusätzlich gelöschte oder
+umgeordnete Datensätze. Die Prüfung ist über **Integrität prüfen** abrufbar und läuft täglich
+automatisch; ihr letzter Status erscheint zusätzlich im administrativen Systemstatus.
+
+Bei einer regulären Aufbewahrungsbereinigung speichert Document Core den letzten entfernten
+Hash und dessen Position als Kettenanker. Der erste verbleibende Eintrag muss weiterhin exakt
+an diesen Anker anschließen. Damit bleibt die Kette auch nach zulässiger Löschung prüfbar.
+Bestehende Einträge werden beim ersten Start nach Migration `0013` einmalig in chronologischer
+Reihenfolge verkettet.
+
+Die Hashkette ist manipulationserkennend, aber kein externer unveränderbarer Speicher. Ein
+uneingeschränkter Datenbankadministrator könnte theoretisch Einträge und internen Anker
+gemeinsam neu berechnen. Für höchste Compliance-Anforderungen bleibt deshalb das regelmäßige
+Signieren oder externe Sichern des aktuellen Kettenkopfs ein späterer Härtungsschritt.

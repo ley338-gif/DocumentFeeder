@@ -89,6 +89,15 @@ class AuditListResponse(BaseModel):
     offset: int
 
 
+class AuditRetentionSettings(BaseModel):
+    retention_days: int = Field(default=365, ge=30, le=3650)
+
+
+class AuditCleanupResult(BaseModel):
+    deleted: int
+    cutoff: datetime
+
+
 class RoutingReference(BaseModel):
     namespace: str = Field(min_length=1, max_length=100)
     type: str = Field(min_length=1, max_length=100)

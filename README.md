@@ -19,6 +19,7 @@ Document Core ist eine erweiterbare, domänenneutrale Dokumenten-Pipeline: Dokum
 - generisches Connector-Interface, Dateisystem- und gehärteter HTTP-Connector
 - lizenzierbarer Microsoft-Graph-Connector für OneDrive und SharePoint mit Entra-App-Authentifizierung und Upload-Sessions
 - offline prüfbare, installationsgebundene Lizenzschlüssel mit Admin-Oberfläche ([Dokumentation](docs/LICENSING.md))
+- SQL-basiertes Systemprotokoll mit Pagination, CSV-Export und Aufbewahrungsregeln ([Dokumentation](docs/AUDIT.md))
 - Multipart-Streaming, Retry-After, Fehlerklassen, Healthcheck und strukturierte HTTP-Quittungen
 - persistente Zielsystemprofile mit Standardziel, Timeout und optionalem Bearer-Token
 - verschlüsselte Connector-Secrets mit Startschutz, Redaction und Schlüsselrotation

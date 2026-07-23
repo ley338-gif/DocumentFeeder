@@ -7,7 +7,7 @@ from document_core.config import Settings
 from document_core.connectors import FilesystemConnector
 from document_core.file_validation import MalwareDetectedError
 from document_core.malware import MalwareScanner
-from document_core.models import JobStatus
+from document_core.models import AuditEvent, JobStatus
 from document_core.pipeline import DocumentPipeline
 from document_core.store import JobStore, TargetSystemRow
 from tests.test_pdf_processing import text_pdf_bytes
@@ -51,6 +51,42 @@ def test_license_activation_unlocks_connector(tmp_path: Path, monkeypatch):
     assert "license_key" not in activated.json()
     graph = next(item for item in modules.json() if item["id"] == "microsoft_graph")
     assert graph["licensed"] is True
+
+
+def test_audit_search_export_and_retention(tmp_path: Path, monkeypatch):
+    configure_api(tmp_path, monkeypatch)
+    for index in range(5):
+        api_module.store.save_audit_event(AuditEvent(
+            actor_username="admin" if index < 3 else "operator",
+            action=f"TEST_{index}",
+            resource_type="document",
+            resource_id=f"doc-{index}",
+            outcome="success" if index % 2 == 0 else "failure",
+            status_code=200 if index % 2 == 0 else 422,
+        ))
+
+    with TestClient(api_module.app) as client:
+        first = client.get("/v1/audit-events", params={
+            "q": "admin", "limit": 2, "offset": 0
+        })
+        second = client.get("/v1/audit-events", params={
+            "q": "admin", "limit": 2, "offset": 2
+        })
+        settings_response = client.put(
+            "/v1/audit-events/retention", json={"retention_days": 180}
+        )
+        export = client.get("/v1/audit-events/export", params={"outcome": "failure"})
+
+    assert first.json()["total"] == 3
+    assert len(first.json()["items"]) == 2
+    assert len(second.json()["items"]) == 1
+    assert settings_response.json() == {"retention_days": 180}
+    assert export.headers["content-type"].startswith("text/csv")
+    assert "attachment;" in export.headers["content-disposition"]
+    csv_text = export.content.decode("utf-8-sig")
+    assert "created_at,actor_username,action" in csv_text
+    assert "TEST_1" in csv_text
+    assert "TEST_0" not in csv_text
 
 
 def test_pdf_upload_reaches_connector_through_http_api(tmp_path: Path, monkeypatch):

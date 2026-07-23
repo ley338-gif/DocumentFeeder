@@ -1,5 +1,8 @@
 import asyncio
+import csv
 import fnmatch
+import io
+import json
 import tempfile
 import hashlib
 import hmac
@@ -12,6 +15,7 @@ from urllib.parse import urlparse
 from fastapi import Body, FastAPI, File, HTTPException, Query, Request, Response, UploadFile
 from fastapi.responses import JSONResponse
 from fastapi.responses import FileResponse
+from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import IntegrityError
 
@@ -27,7 +31,9 @@ from .file_validation import DocumentRejectedError, FileTooLargeError
 from .models import (
     DocumentJob,
     AuditEvent,
+    AuditCleanupResult,
     AuditListResponse,
+    AuditRetentionSettings,
     DeliveryRule,
     DeliveryRuleCreate,
     DeliveryRuleUpdate,
@@ -94,6 +100,31 @@ async def watch_hotfolder() -> None:
         await asyncio.sleep(settings.hotfolder_interval)
 
 
+def audit_retention_days() -> int:
+    try:
+        return max(30, min(3650, int(
+            store.get_system_setting("audit_retention_days", "365") or "365"
+        )))
+    except ValueError:
+        return 365
+
+
+async def enforce_audit_retention() -> None:
+    while True:
+        cutoff = datetime.now(UTC) - timedelta(days=audit_retention_days())
+        deleted = store.delete_audit_events_before(cutoff)
+        if deleted:
+            store.save_audit_event(AuditEvent(
+                actor_username="system",
+                action="AUDIT_RETENTION",
+                resource_type="audit",
+                outcome="success",
+                status_code=200,
+                details={"deleted": deleted, "cutoff": cutoff.isoformat()},
+            ))
+        await asyncio.sleep(24 * 60 * 60)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     store.migrate_or_rotate_target_secrets()
@@ -110,10 +141,14 @@ async def lifespan(_: FastAPI):
     store.ensure_default_channel()
     store.ensure_default_target_system()
     watcher = asyncio.create_task(watch_hotfolder())
+    retention = asyncio.create_task(enforce_audit_retention())
     yield
     watcher.cancel()
+    retention.cancel()
     with suppress(asyncio.CancelledError):
         await watcher
+    with suppress(asyncio.CancelledError):
+        await retention
 
 
 app = FastAPI(title="Document Core", version="0.1.0", lifespan=lifespan)
@@ -300,17 +335,80 @@ def list_audit_events(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> AuditListResponse:
-    events = store.list_audit_events()
-    if outcome:
-        events = [event for event in events if event.outcome == outcome]
-    if q:
-        needle = q.casefold()
-        events = [event for event in events if needle in " ".join((
-            event.actor_username, event.action, event.resource_type, event.resource_id or ""
-        )).casefold()]
+    events, total = store.search_audit_events(q, outcome, limit, offset)
     return AuditListResponse(
-        items=events[offset:offset + limit], total=len(events), limit=limit, offset=offset
+        items=events, total=total, limit=limit, offset=offset
     )
+
+
+@app.get("/v1/audit-events/export")
+def export_audit_events(
+    request: Request,
+    q: str | None = Query(default=None, max_length=200),
+    outcome: str | None = Query(default=None, pattern="^(success|failure)$"),
+) -> StreamingResponse:
+    user = getattr(request.state, "user", None)
+    store.save_audit_event(AuditEvent(
+        actor_user_id=user.id if user else None,
+        actor_username=user.username if user else "system",
+        action="EXPORT_AUDIT",
+        resource_type="audit",
+        outcome="success",
+        status_code=200,
+        details={"q": q, "outcome": outcome, "format": "csv"},
+    ))
+
+    def rows():
+        buffer = io.StringIO()
+        writer = csv.writer(buffer)
+        writer.writerow((
+            "created_at", "actor_username", "action", "resource_type", "resource_id",
+            "outcome", "status_code", "details",
+        ))
+        yield buffer.getvalue().encode("utf-8-sig")
+        for event in store.iter_audit_events(q, outcome):
+            buffer.seek(0)
+            buffer.truncate(0)
+            writer.writerow((
+                event.created_at.isoformat(),
+                event.actor_username,
+                event.action,
+                event.resource_type,
+                event.resource_id or "",
+                event.outcome,
+                event.status_code,
+                json.dumps(event.details, ensure_ascii=False, separators=(",", ":")),
+            ))
+            yield buffer.getvalue().encode("utf-8")
+
+    filename = f"document-core-audit-{datetime.now(UTC):%Y-%m-%d}.csv"
+    return StreamingResponse(
+        rows(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/v1/audit-events/retention", response_model=AuditRetentionSettings)
+def get_audit_retention() -> AuditRetentionSettings:
+    return AuditRetentionSettings(retention_days=audit_retention_days())
+
+
+@app.put("/v1/audit-events/retention", response_model=AuditRetentionSettings)
+def set_audit_retention(
+    settings_request: AuditRetentionSettings,
+) -> AuditRetentionSettings:
+    store.set_system_setting(
+        "audit_retention_days", str(settings_request.retention_days)
+    )
+    return settings_request
+
+
+@app.post("/v1/audit-events/cleanup", response_model=AuditCleanupResult)
+def cleanup_audit_events() -> AuditCleanupResult:
+    cutoff = datetime.now(UTC) - timedelta(days=audit_retention_days())
+    deleted = store.delete_audit_events_before(cutoff)
+    return AuditCleanupResult(deleted=deleted, cutoff=cutoff)
 
 
 @app.get("/v1/system-status")

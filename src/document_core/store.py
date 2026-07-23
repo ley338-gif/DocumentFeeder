@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Protocol
 from uuid import uuid4
 
-from sqlalchemy import JSON, DateTime, Integer, String, Text, and_, create_engine, delete, inspect, or_, select, text, update
+from sqlalchemy import JSON, DateTime, Integer, String, Text, and_, create_engine, delete, func, inspect, or_, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -558,16 +558,74 @@ class JobStore:
         return event
 
     def list_audit_events(self) -> list[AuditEvent]:
+        items, _ = self.search_audit_events(limit=10000)
+        return items
+
+    @staticmethod
+    def _audit_filters(q: str | None = None, outcome: str | None = None) -> list:
+        filters = []
+        if outcome:
+            filters.append(AuditEventRow.outcome == outcome)
+        if q:
+            pattern = f"%{q.strip()}%"
+            filters.append(or_(
+                AuditEventRow.actor_username.ilike(pattern),
+                AuditEventRow.action.ilike(pattern),
+                AuditEventRow.resource_type.ilike(pattern),
+                AuditEventRow.resource_id.ilike(pattern),
+            ))
+        return filters
+
+    @staticmethod
+    def _audit_model(row: AuditEventRow) -> AuditEvent:
+        return AuditEvent.model_validate({
+            key: getattr(row, key) for key in (
+                "id", "actor_user_id", "actor_username", "action", "resource_type",
+                "resource_id", "outcome", "status_code", "details", "created_at",
+            )
+        })
+
+    def search_audit_events(
+        self,
+        q: str | None = None,
+        outcome: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> tuple[list[AuditEvent], int]:
+        filters = self._audit_filters(q, outcome)
         with self.sessions() as session:
             rows = session.scalars(
-                select(AuditEventRow).order_by(AuditEventRow.created_at.desc())
+                select(AuditEventRow)
+                .where(*filters)
+                .order_by(AuditEventRow.created_at.desc())
+                .limit(limit)
+                .offset(offset)
             ).all()
-            return [AuditEvent.model_validate({
-                key: getattr(row, key) for key in (
-                    "id", "actor_user_id", "actor_username", "action", "resource_type",
-                    "resource_id", "outcome", "status_code", "details", "created_at",
-                )
-            }) for row in rows]
+            total = session.scalar(
+                select(func.count()).select_from(AuditEventRow).where(*filters)
+            ) or 0
+            return [self._audit_model(row) for row in rows], total
+
+    def iter_audit_events(
+        self, q: str | None = None, outcome: str | None = None
+    ):
+        filters = self._audit_filters(q, outcome)
+        with self.sessions() as session:
+            rows = session.scalars(
+                select(AuditEventRow)
+                .where(*filters)
+                .order_by(AuditEventRow.created_at.desc())
+                .execution_options(yield_per=500)
+            )
+            for row in rows:
+                yield self._audit_model(row)
+
+    def delete_audit_events_before(self, cutoff: datetime) -> int:
+        with self.sessions.begin() as session:
+            result = session.execute(
+                delete(AuditEventRow).where(AuditEventRow.created_at < cutoff)
+            )
+            return result.rowcount or 0
 
     def heartbeat_worker(self, worker_id: str, current_job_id: str | None = None) -> None:
         now = datetime.now(UTC)

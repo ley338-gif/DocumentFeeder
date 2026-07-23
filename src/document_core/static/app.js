@@ -2,7 +2,7 @@ const state = {
   jobs: [], total: 0, limit: 20, offset: 0, selectedId: null,
   selectedUpdatedAt: null, selectedStatus: null, reviewDirty: false, targets: [],
   jobsSignature: null, statsSignature: null, status: "", query: "", currentUser: null,
-  connectorModules: []
+  connectorModules: [], auditOffset: 0, auditLimit: 50
 };
 const labels = {
   received: "Eingegangen", processing: "In Verarbeitung", quarantined: "Zu prüfen",
@@ -350,7 +350,7 @@ function switchView(view, sourceButton = null) {
   if (view === "targets") loadTargets();
   if (view === "automation") loadRules();
   if (view === "users") loadUsers();
-  if (view === "audit") loadAuditEvents();
+  if (view === "audit") { loadAuditEvents(); loadAuditRetention(); }
   if (view === "system") loadSystemStatus();
   if (view === "license") loadLicense();
 }
@@ -390,13 +390,69 @@ async function loadSystemStatus() {
 }
 
 async function loadAuditEvents() {
-  const params = new URLSearchParams({limit: "100"});
+  const params = new URLSearchParams({
+    limit: String(state.auditLimit), offset: String(state.auditOffset)
+  });
   const query = $("#audit-search").value.trim(); const outcome = $("#audit-outcome").value;
   if (query) params.set("q", query); if (outcome) params.set("outcome", outcome);
   try {
     const result = await api(`/v1/audit-events?${params}`);
     $("#audit-list").innerHTML = result.items.length ? result.items.map(event => `<article class="audit-row"><span class="audit-status ${event.outcome}"></span><div><strong>${esc(event.actor_username)}</strong><span>${esc(event.action)}</span></div><div><strong>${esc(event.resource_type)}</strong><span>${esc(event.resource_id)}</span></div><span class="badge ${event.outcome === "success" ? "delivered" : "failed"}">${event.outcome === "success" ? "Erfolgreich" : "Fehler"}</span><time>${formatTime(event.created_at)}</time></article>`).join("") : '<div class="empty-list"><strong>Keine Protokolleinträge gefunden</strong></div>';
-    $("#audit-page-info").textContent = `${result.total} Einträge`;
+    const first = result.total ? result.offset + 1 : 0;
+    const last = Math.min(result.offset + result.items.length, result.total);
+    $("#audit-page-info").textContent = `${first}–${last} von ${result.total}`;
+    $("#audit-previous").disabled = result.offset === 0;
+    $("#audit-next").disabled = result.offset + result.limit >= result.total;
+  } catch (error) { toast(error.message, true); }
+}
+
+async function loadAuditRetention() {
+  try {
+    const settings = await api("/v1/audit-events/retention");
+    $("#audit-retention-form").elements.retention_days.value = settings.retention_days;
+  } catch (error) { toast(error.message, true); }
+}
+
+async function saveAuditRetention(event) {
+  event.preventDefault();
+  const retentionDays = Number(new FormData(event.currentTarget).get("retention_days"));
+  try {
+    await api("/v1/audit-events/retention", {
+      method: "PUT", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({retention_days: retentionDays})
+    });
+    toast("Aufbewahrung gespeichert");
+  } catch (error) { toast(error.message, true); }
+}
+
+async function cleanupAudit() {
+  if (!window.confirm("Alle Protokolleinträge außerhalb der Aufbewahrungsfrist löschen?")) return;
+  try {
+    const result = await api("/v1/audit-events/cleanup", {method: "POST"});
+    state.auditOffset = 0;
+    toast(`${result.deleted} ältere Einträge gelöscht`);
+    await loadAuditEvents();
+  } catch (error) { toast(error.message, true); }
+}
+
+async function exportAudit() {
+  const params = new URLSearchParams();
+  const query = $("#audit-search").value.trim();
+  const outcome = $("#audit-outcome").value;
+  if (query) params.set("q", query);
+  if (outcome) params.set("outcome", outcome);
+  try {
+    const response = await fetch(`/v1/audit-events/export?${params}`);
+    if (!response.ok) throw new Error(`Export fehlgeschlagen (${response.status})`);
+    const blob = await response.blob();
+    const disposition = response.headers.get("Content-Disposition") || "";
+    const filename = disposition.match(/filename="([^"]+)"/)?.[1] || "document-core-audit.csv";
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url; link.download = filename; link.click();
+    URL.revokeObjectURL(url);
+    toast("Audit-Export erstellt");
+    await loadAuditEvents();
   } catch (error) { toast(error.message, true); }
 }
 
@@ -584,10 +640,11 @@ async function loadLicense() {
 
 async function activateLicense(event) {
   event.preventDefault();
-  const licenseKey = new FormData(event.currentTarget).get("license_key").trim();
+  const licenseForm = event.currentTarget;
+  const licenseKey = new FormData(licenseForm).get("license_key").trim();
   try {
     await api("/v1/license", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({license_key: licenseKey})});
-    event.currentTarget.reset();
+    licenseForm.reset();
     toast("Lizenz aktiviert");
     await Promise.all([loadLicense(), loadTargets()]);
   } catch (error) { toast(error.message, true); }
@@ -739,12 +796,17 @@ $("#rule-form").addEventListener("submit", createRule);
 $("#user-form").addEventListener("submit", createUser);
 $("#reload-users").addEventListener("click", loadUsers);
 $("#reload-audit").addEventListener("click", loadAuditEvents);
+$("#audit-previous").addEventListener("click", () => { state.auditOffset = Math.max(0, state.auditOffset - state.auditLimit); loadAuditEvents(); });
+$("#audit-next").addEventListener("click", () => { state.auditOffset += state.auditLimit; loadAuditEvents(); });
+$("#audit-retention-form").addEventListener("submit", saveAuditRetention);
+$("#cleanup-audit").addEventListener("click", cleanupAudit);
+$("#export-audit").addEventListener("click", exportAudit);
 $("#reload-system").addEventListener("click", loadSystemStatus);
 $("#license-form").addEventListener("submit", activateLicense);
 $("#reload-license").addEventListener("click", loadLicense);
 $("#remove-license").addEventListener("click", removeLicense);
-$("#audit-outcome").addEventListener("change", loadAuditEvents);
-$("#audit-search").addEventListener("input", event => { window.clearTimeout(state.auditTimer); state.auditTimer = window.setTimeout(loadAuditEvents, 250); });
+$("#audit-outcome").addEventListener("change", () => { state.auditOffset = 0; loadAuditEvents(); });
+$("#audit-search").addEventListener("input", event => { window.clearTimeout(state.auditTimer); state.auditTimer = window.setTimeout(() => { state.auditOffset = 0; loadAuditEvents(); }, 250); });
 $("#login-form").addEventListener("submit", login);
 $("#profile-form").addEventListener("submit", saveProfile);
 $("#logout-button").addEventListener("click", logout);

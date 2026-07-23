@@ -260,6 +260,10 @@ body.read-only-config #open-target-dialog { display: none; }
 body.read-only-config #channels-view .channel-layout, body.read-only-config #targets-view .channel-layout, body.read-only-config #automation-view .channel-layout { grid-template-columns: 1fr; }
 body.viewer-mode .upload-button { display: none; }
 .audit-panel { overflow: hidden; border: 1px solid var(--line); border-radius: 9px; background: white; box-shadow: var(--shadow); }
+.audit-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.retention-form { display: flex; align-items: center; gap: 8px; }
+.retention-form label { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; }
+.retention-form input { width: 82px; height: 34px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
 .audit-toolbar { border-bottom: 1px solid var(--line); }
 .audit-list { display: grid; }
 .audit-row { display: grid; grid-template-columns: 10px minmax(180px,1.2fr) minmax(180px,1fr) 90px 150px; align-items: center; gap: 12px; padding: 12px 15px; border-bottom: 1px solid var(--line); }
@@ -366,4 +370,5 @@ h1 { font-size: clamp(28px, 3vw, 38px); letter-spacing: -.035em; font-weight: 65
 @media (max-width: 600px) {
   .target-form-grid, .connector-fields { grid-template-columns: 1fr; }
   .target-options { align-items: start; flex-direction: column; gap: 10px; }
+  .audit-actions, .retention-form { align-items: stretch; flex-direction: column; }
 }

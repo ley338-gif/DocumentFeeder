@@ -336,6 +336,7 @@ def test_target_systems_can_be_managed_without_exposing_tokens(tmp_path: Path, m
                 "name": "Sandbox API",
                 "kind": "http",
                 "endpoint_url": "http://mock-target:8090/documents",
+                "healthcheck_url": "http://mock-target:8090/health",
                 "bearer_token": "top-secret",
                 "timeout_seconds": 10,
                 "enabled": True,
@@ -343,6 +344,20 @@ def test_target_systems_can_be_managed_without_exposing_tokens(tmp_path: Path, m
             },
         )
         target = created.json()
+        class HealthResponse:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return None
+
+            def read(self, *_args):
+                return b'{"status":"ok"}'
+
+        monkeypatch.setattr("urllib.request.urlopen", lambda *_args, **_kwargs: HealthResponse())
+        health = client.get(f"/v1/target-systems/{target['id']}/health")
         listing = client.get("/v1/target-systems")
         delete_default = client.delete(f"/v1/target-systems/{target['id']}")
         uninstalled = client.post(
@@ -354,6 +369,8 @@ def test_target_systems_can_be_managed_without_exposing_tokens(tmp_path: Path, m
     assert initial.json()[0]["kind"] == "filesystem"
     assert created.status_code == 201
     assert target["has_bearer_token"] is True
+    assert target["healthcheck_url"] == "http://mock-target:8090/health"
+    assert health.json()["status"] == "ok"
     assert "bearer_token" not in target
     assert all("bearer_token" not in item for item in listing.json())
     with api_module.store.sessions() as session:

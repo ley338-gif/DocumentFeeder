@@ -17,6 +17,7 @@ Document Core ist eine erweiterbare, domänenneutrale Dokumenten-Pipeline: Dokum
 - provider-neutrale Dokumentklassifizierung mit Konfidenz, Evidenz und Modellversion
 - Workflow-Regeln (Pflichtfelder, Quarantäne)
 - generisches Connector-Interface, Dateisystem- und HTTP-Connector
+- Multipart-Streaming, Retry-After, Fehlerklassen, Healthcheck und strukturierte HTTP-Quittungen
 - persistente Zielsystemprofile mit Standardziel, Timeout und optionalem Bearer-Token
 - verschlüsselte Connector-Secrets mit Startschutz, Redaction und Schlüsselrotation
 - dokumenttypabhängige Ablageregeln und sichere Dateisystem-Pfadvorlagen

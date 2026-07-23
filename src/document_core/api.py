@@ -504,6 +504,12 @@ def validate_target(target: TargetSystem) -> None:
         parsed = urlparse(target.endpoint_url or "")
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
             raise HTTPException(status_code=422, detail="HTTP-Ziel benötigt eine gültige URL")
+        if target.healthcheck_url:
+            health = urlparse(target.healthcheck_url)
+            if health.scheme not in {"http", "https"} or not health.netloc:
+                raise HTTPException(
+                    status_code=422, detail="Healthcheck benötigt eine gültige HTTP-URL"
+                )
     elif target.endpoint_url:
         raise HTTPException(status_code=422, detail="Dateisystem-Ziele haben keine Endpoint-URL")
     if target.kind == "filesystem":
@@ -543,6 +549,21 @@ def list_target_systems() -> list[TargetSystemView]:
 @app.get("/v1/connector-modules")
 def list_connector_modules() -> list[dict]:
     return pipeline.connector_registry.describe()
+
+
+@app.get("/v1/target-systems/{target_id}/health")
+def target_system_health(target_id: str) -> dict:
+    target = store.get_target_system(target_id)
+    if target is None:
+        raise HTTPException(status_code=404, detail="Zielsystem nicht gefunden")
+    try:
+        healthy = pipeline.connector_registry.create(target).healthcheck()
+    except Exception as exc:
+        return {"status": "error", "detail": store.redact(str(exc))}
+    return {
+        "status": "ok" if healthy else "error",
+        "detail": None if healthy else "Zielsystem nicht erreichbar oder Healthcheck fehlt",
+    }
 
 
 @app.post("/v1/target-systems", response_model=TargetSystemView, status_code=201)

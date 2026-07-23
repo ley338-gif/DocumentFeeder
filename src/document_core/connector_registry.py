@@ -78,7 +78,9 @@ def create_default_connector_registry(settings: Settings) -> ConnectorRegistry:
         name="HTTP API",
         version="1.0",
         capabilities=("document", "metadata", "authentication", "idempotency"),
-        configuration_fields=("endpoint_url", "timeout_seconds"),
+        configuration_fields=(
+            "endpoint_url", "healthcheck_url", "timeout_seconds", "max_response_bytes"
+        ),
         secret_fields=("bearer_token",),
         factory=HttpConnector,
     ))

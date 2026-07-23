@@ -7,7 +7,12 @@ from pathlib import Path
 
 from .config import Settings
 from .connector_registry import ConnectorRegistry, create_default_connector_registry
-from .connectors import TargetConnector
+from .connectors import (
+    DeliveryReceipt,
+    PermanentConnectorError,
+    TargetConnector,
+    TemporaryConnectorError,
+)
 from .file_validation import FileTooLargeError, detect_and_validate_type
 from .malware import MalwareScanner, MalwareScanResult, create_malware_scanner
 from .models import DocumentJob, JobEvent, JobStatus, ReviewEvent, ReviewRequest
@@ -217,8 +222,13 @@ class DocumentPipeline:
             error = getattr(self.store, "redact", lambda value: value)(str(exc))
             job.errors.append(error)
             job.last_error = error
-            if job.attempt_count < self.settings.worker_max_attempts:
+            if (
+                not isinstance(exc, PermanentConnectorError)
+                and job.attempt_count < self.settings.worker_max_attempts
+            ):
                 delay = self.settings.worker_retry_base_seconds * (2 ** (job.attempt_count - 1))
+                if isinstance(exc, TemporaryConnectorError) and exc.retry_after_seconds is not None:
+                    delay = max(delay, exc.retry_after_seconds)
                 job.status = JobStatus.RECEIVED
                 job.next_attempt_at = datetime.now(UTC) + timedelta(seconds=delay)
                 self._event(
@@ -342,7 +352,14 @@ class DocumentPipeline:
             started_at=started_at,
         )
         try:
-            reference = self._connector_for(job).deliver(job)
+            result = self._connector_for(job).deliver(job)
+            receipt = (
+                result
+                if isinstance(result, DeliveryReceipt)
+                else DeliveryReceipt(reference=str(result), connector="legacy")
+            )
+            reference = receipt.reference
+            job.metadata["delivery_receipt"] = receipt.metadata()
             completed_at = datetime.now(UTC)
             if target is not None:
                 target.last_delivery_at = completed_at
@@ -356,7 +373,7 @@ class DocumentPipeline:
                 attempt=job.attempt_count,
                 target=target,
                 external_reference=reference,
-                details=event_details,
+                details=event_details | {"receipt": receipt.metadata()},
                 started_at=started_at,
                 completed_at=completed_at,
             )

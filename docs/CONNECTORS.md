@@ -4,11 +4,14 @@
 
 ```python
 class TargetConnector(ABC):
-    def deliver(self, job: DocumentJob) -> str: ...
+    def deliver(self, job: DocumentJob) -> DeliveryReceipt: ...
     def healthcheck(self) -> bool: ...
 ```
 
-`deliver` muss bei Wiederholung sicher sein (Idempotenzschlüssel: `job.id` oder `sha256`) und eine externe Referenz zurückgeben. Vor manuellen Zustellungen beansprucht ein atomarer Datenbankwechsel den Job exklusiv. Fehler dürfen nicht verschluckt werden; die Pipeline setzt den Job auf `failed`.
+`deliver` muss bei Wiederholung sicher sein (Idempotenzschlüssel: `job.id` oder `sha256`) und
+eine strukturierte Quittung mit externer Referenz zurückgeben. Vor manuellen Zustellungen
+beansprucht ein atomarer Datenbankwechsel den Job exklusiv. Fehler dürfen nicht verschluckt
+werden; die Pipeline setzt den Job abhängig von der Fehlerklasse auf Retry oder `failed`.
 
 ## Modul-Registry und Lizenzen
 
@@ -80,13 +83,24 @@ Eine Vorlage darf auch einen vollständigen Dateinamen enthalten. Dafür stehen
 `{invoice_number}` und `{extension}` zur Verfügung. Rechnungsnummern werden im Dateinamen
 auf Buchstaben und Ziffern reduziert, beispielsweise
 `{year}-{month}_{supplier_name}_{invoice_number}{extension}`.
-Aufgelöste Pfade müssen innerhalb des Zielordners bleiben. Der generische HTTP-Connector sendet ein JSON-Paket
-per `POST`. `Idempotency-Key` enthält immer die Job-ID; ein optionaler Bearer-Token wird als
-`Authorization`-Header übertragen und von der Verwaltungs-API niemals zurückgegeben.
+Aufgelöste Pfade müssen innerhalb des Zielordners bleiben. Der generische HTTP-Connector sendet
+das Dokument per `multipart/form-data`: `metadata` enthält ein JSON-Objekt, `file` streamt den
+Originalinhalt in Blöcken. Dadurch entstehen weder Base64-Aufschlag noch eine vollständige
+Dokumentkopie im Arbeitsspeicher. `Idempotency-Key` enthält immer die Job-ID; ein optionaler
+Bearer-Token wird als `Authorization`-Header übertragen und von der Verwaltungs-API niemals
+zurückgegeben. Das Multipart-Format folgt [RFC 7578](https://www.rfc-editor.org/info/rfc7578/).
 
-Das HTTP-Paket enthält `job_id`, `filename`, `content_type`, den Base64-kodierten Inhalt,
-`document_type`, `routing_reference` und `metadata`. Die Zielantwort sollte `reference` oder
-`id` als JSON liefern. Alternativ verwendet der Connector den `Location`-Header.
+Die Zielantwort darf leer sein oder muss `application/json` mit `reference`, `id` und optional
+`status` liefern. Alternativ verwendet der Connector den `Location`-Header. Antwortgrößen sind
+pro Ziel begrenzt. Die technische Quittung mit Connector, HTTP-Status, Content-Type, Referenz und
+freigegebenen Antwortfeldern wird unter `metadata.delivery_receipt` und im Zustellereignis
+persistiert.
+
+Netzwerkfehler sowie HTTP `408`, `425`, `429`, `500`, `502`, `503` und `504` gelten als temporär.
+Bei `429` und `503` wird `Retry-After` als Sekundenwert oder HTTP-Datum ausgewertet und als
+Mindestwartezeit für den nächsten Worker-Versuch übernommen. Andere `4xx`-Antworten gelten als
+permanent und werden nicht wiederholt. Eine optionale `healthcheck_url` wird mit demselben Token,
+Timeout und Antwortlimit geprüft, ohne ein Dokument zu übertragen.
 
 Docker Compose enthält unter `http://localhost:8090` ein ausschließlich für Entwicklung
 bestimmtes Mock-Ziel. Zustellungen an `http://mock-target:8090/documents` werden unter

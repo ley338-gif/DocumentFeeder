@@ -472,6 +472,7 @@ async function loadTargets() {
             <span>Modul <strong>${esc(target.connector_name)} ${esc(target.kind)} · v${esc(modules.find(module => module.id === target.kind)?.version || "—")}</strong></span>
             <span>Funktionen <strong>${target.capabilities.map(esc).join(", ") || "—"}</strong></span>
             <span>Timeout <strong>${target.timeout_seconds}s</strong></span>
+            ${target.healthcheck_url ? `<span>Healthcheck <strong>${esc(target.healthcheck_url)}</strong></span>` : ""}
             <span>Letzte Zustellung <strong>${formatTime(target.last_delivery_at)}</strong></span>
             <span>Token <strong>${target.has_bearer_token ? "hinterlegt" : "—"}</strong></span>
             ${target.kind === "filesystem" ? `<span>Ablage <strong>data/${esc(target.directory)}/${esc(target.path_template)}</strong></span>` : ""}
@@ -479,14 +480,23 @@ async function loadTargets() {
           ${target.last_error ? `<div class="channel-error">${esc(target.last_error)}</div>` : ""}
         </div>
         <div class="channel-actions">
+          <button class="button target-health" data-id="${target.id}" type="button">Verbindung prüfen</button>
           ${!target.is_default ? `<button class="button target-default" data-id="${target.id}" type="button">Als Standard</button>` : ""}
           <button class="button target-toggle" data-id="${target.id}" data-enabled="${target.enabled}" type="button" ${target.is_default ? "disabled" : ""}>${target.enabled ? "Pausieren" : "Aktivieren"}</button>
           ${!target.is_default ? `<button class="button danger target-delete" data-id="${target.id}" type="button">Löschen</button>` : ""}
         </div>
       </article>`).join("");
     document.querySelectorAll(".target-default").forEach(button => button.addEventListener("click", () => updateTarget(button.dataset.id, {enabled: true, is_default: true}, "Standardziel geändert")));
+    document.querySelectorAll(".target-health").forEach(button => button.addEventListener("click", () => checkTargetHealth(button.dataset.id)));
     document.querySelectorAll(".target-toggle").forEach(button => button.addEventListener("click", () => updateTarget(button.dataset.id, {enabled: button.dataset.enabled !== "true"}, "Zielsystem aktualisiert")));
     document.querySelectorAll(".target-delete").forEach(button => button.addEventListener("click", () => deleteTarget(button.dataset.id)));
+  } catch (error) { toast(error.message, true); }
+}
+
+async function checkTargetHealth(id) {
+  try {
+    const result = await api(`/v1/target-systems/${id}/health`);
+    toast(result.status === "ok" ? "Zielsystem ist erreichbar" : result.detail, result.status !== "ok");
   } catch (error) { toast(error.message, true); }
 }
 
@@ -511,15 +521,17 @@ async function createTarget(event) {
   const body = {
     name: form.get("name"), kind,
     endpoint_url: kind === "http" ? form.get("endpoint_url") : null,
+    healthcheck_url: kind === "http" ? (form.get("healthcheck_url") || null) : null,
     directory: form.get("directory") || "output",
     path_template: form.get("path_template") || "{document_type}/{job_id}",
     bearer_token: form.get("bearer_token") || null,
     timeout_seconds: Number(form.get("timeout_seconds")),
+    max_response_bytes: Number(form.get("max_response_bytes")),
     enabled: form.get("enabled") === "on", is_default: form.get("is_default") === "on"
   };
   try {
     await api("/v1/target-systems", {method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body)});
-    targetForm.reset(); targetForm.elements.enabled.checked = true; targetForm.elements.timeout_seconds.value = 30;
+    targetForm.reset(); targetForm.elements.enabled.checked = true; targetForm.elements.timeout_seconds.value = 30; targetForm.elements.max_response_bytes.value = 65536;
     toast("Zielsystem angelegt"); await loadTargets();
   } catch (error) { toast(error.message, true); }
 }

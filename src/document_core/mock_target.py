@@ -1,19 +1,7 @@
-import base64
 import json
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
-
-
-class DeliveryPayload(BaseModel):
-    job_id: str = Field(min_length=1, max_length=100)
-    filename: str = Field(min_length=1, max_length=500)
-    content_type: str
-    content_base64: str
-    document_type: str
-    routing_reference: dict | None = None
-    metadata: dict
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 
 
 app = FastAPI(title="Document Core Mock Target")
@@ -26,17 +14,22 @@ def health() -> dict[str, str]:
 
 
 @app.post("/documents", status_code=201)
-def receive_document(payload: DeliveryPayload) -> dict[str, str]:
+async def receive_document(
+    metadata: str = Form(...), file: UploadFile = File(...)
+) -> dict[str, str]:
     try:
-        content = base64.b64decode(payload.content_base64, validate=True)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail="Ungültiger Base64-Inhalt") from exc
-    destination = output_dir / payload.job_id
+        payload = json.loads(metadata)
+        job_id = str(payload["job_id"])
+    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise HTTPException(status_code=422, detail="Ungültige Metadaten") from exc
+    destination = output_dir / job_id
     destination.mkdir(parents=True, exist_ok=True)
-    document = destination / Path(payload.filename).name
-    document.write_bytes(content)
+    document = destination / Path(file.filename or "document.bin").name
+    with document.open("wb") as target:
+        while chunk := await file.read(1024 * 1024):
+            target.write(chunk)
     (destination / "delivery.json").write_text(
-        json.dumps(payload.model_dump(exclude={"content_base64"}), ensure_ascii=False, indent=2),
+        json.dumps(payload, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
-    return {"reference": f"mock:{payload.job_id}"}
+    return {"reference": f"mock:{job_id}", "status": "accepted"}

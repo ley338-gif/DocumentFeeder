@@ -1,6 +1,5 @@
 from pathlib import Path
 import hashlib
-import json
 
 import pytest
 
@@ -149,7 +148,7 @@ def test_document_reaches_configured_http_target(tmp_path: Path, monkeypatch):
 
     class Response:
         status = 201
-        headers = {}
+        headers = {"Content-Type": "application/json"}
 
         def __enter__(self):
             return self
@@ -157,11 +156,12 @@ def test_document_reaches_configured_http_target(tmp_path: Path, monkeypatch):
         def __exit__(self, *_args):
             return None
 
-        def read(self):
+        def read(self, *_args):
             return b'{"reference":"remote:42"}'
 
     def fake_urlopen(request, timeout):
-        captured["payload"] = json.loads(request.data)
+        captured["body"] = b"".join(request.data)
+        captured["content_type"] = request.headers["Content-type"]
         captured["authorization"] = request.headers["Authorization"]
         captured["timeout"] = timeout
         return Response()
@@ -175,7 +175,10 @@ def test_document_reaches_configured_http_target(tmp_path: Path, monkeypatch):
     assert queued.target_system_id == target.id
     assert job.status == JobStatus.DELIVERED
     assert job.metadata["destination_reference"] == "remote:42"
-    assert captured["payload"]["document_type"] == "report"
+    assert b'"document_type": "report"' in captured["body"]
+    assert b"Bericht" in captured["body"]
+    assert b"Betreff: HTTP Ziel" in captured["body"]
+    assert captured["content_type"].startswith("multipart/form-data; boundary=")
     assert captured["authorization"] == "Bearer secret"
     assert store.get_target_system(target.id).last_delivery_at is not None
     delivery = next(
@@ -186,6 +189,8 @@ def test_document_reaches_configured_http_target(tmp_path: Path, monkeypatch):
     assert delivery.event_type == "delivery_succeeded"
     assert delivery.target_name == "HTTP Sandbox"
     assert delivery.external_reference == "remote:42"
+    assert delivery.details["receipt"]["status_code"] == 201
+    assert job.metadata["delivery_receipt"]["connector"] == "http"
 
 
 def test_delivery_rule_routes_invoice_to_configured_folder(tmp_path: Path):

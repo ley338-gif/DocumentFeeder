@@ -197,12 +197,14 @@ class TargetSystem(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     kind: str = Field(pattern=r"^[a-z][a-z0-9_.-]{1,63}$")
     endpoint_url: str | None = Field(default=None, max_length=1000)
+    healthcheck_url: str | None = Field(default=None, max_length=1000)
     directory: str = Field(default="output", min_length=1, max_length=300)
     path_template: str = Field(
         default="{document_type}/{job_id}", min_length=1, max_length=500
     )
     bearer_token: str | None = Field(default=None, max_length=2000, repr=False)
     timeout_seconds: int = Field(default=30, ge=1, le=300)
+    max_response_bytes: int = Field(default=65536, ge=1024, le=1048576)
     enabled: bool = True
     is_default: bool = False
     last_delivery_at: datetime | None = None
@@ -219,10 +221,12 @@ class TargetSystemView(BaseModel):
     capabilities: list[str]
     licensed: bool
     endpoint_url: str | None
+    healthcheck_url: str | None
     directory: str
     path_template: str
     has_bearer_token: bool
     timeout_seconds: int
+    max_response_bytes: int
     enabled: bool
     is_default: bool
     last_delivery_at: datetime | None
@@ -235,12 +239,14 @@ class TargetSystemCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     kind: str = Field(pattern=r"^[a-z][a-z0-9_.-]{1,63}$")
     endpoint_url: str | None = Field(default=None, max_length=1000)
+    healthcheck_url: str | None = Field(default=None, max_length=1000)
     directory: str = Field(default="output", min_length=1, max_length=300)
     path_template: str = Field(
         default="{document_type}/{job_id}", min_length=1, max_length=500
     )
     bearer_token: str | None = Field(default=None, max_length=2000)
     timeout_seconds: int = Field(default=30, ge=1, le=300)
+    max_response_bytes: int = Field(default=65536, ge=1024, le=1048576)
     enabled: bool = True
     is_default: bool = False
 
@@ -248,11 +254,13 @@ class TargetSystemCreate(BaseModel):
 class TargetSystemUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
     endpoint_url: str | None = Field(default=None, max_length=1000)
+    healthcheck_url: str | None = Field(default=None, max_length=1000)
     directory: str | None = Field(default=None, min_length=1, max_length=300)
     path_template: str | None = Field(default=None, min_length=1, max_length=500)
     bearer_token: str | None = Field(default=None, max_length=2000)
     clear_bearer_token: bool = False
     timeout_seconds: int | None = Field(default=None, ge=1, le=300)
+    max_response_bytes: int | None = Field(default=None, ge=1024, le=1048576)
     enabled: bool | None = None
     is_default: bool | None = None
 

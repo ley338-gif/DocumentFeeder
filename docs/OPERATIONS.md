@@ -10,6 +10,10 @@
 | `data/quarantine` | fachlich unklare Dokumente |
 | `data/mock-target` | Zustellungen des lokalen Mock-Zielsystems |
 
+Die Pfade sind lokale Standardwerte. Produktiv können Eingang, Arbeitsbereich und Zielablage
+separat auf persistente Volumes oder Netzwerkfreigaben gelegt werden. Siehe
+[Speicherbereiche und Dateilebenszyklus](STORAGE.md).
+
 ## Konfiguration
 
 Alle Einstellungen beginnen mit `DOCUMENT_CORE_`; siehe `.env.example`. `DOCUMENT_CORE_REQUIRE_ROUTING_REFERENCE=true` erzwingt vor einer Auslieferung eine strukturierte Zielobjektreferenz.
@@ -27,6 +31,10 @@ Queue und Worker werden über folgende Variablen gesteuert:
 | `DOCUMENT_CORE_WORKER_LEASE_SECONDS` | `300` | Reservierungsdauer eines Jobs |
 | `DOCUMENT_CORE_WORKER_MAX_ATTEMPTS` | `3` | maximale technische Versuche |
 | `DOCUMENT_CORE_WORKER_RETRY_BASE_SECONDS` | `5` | Basis des exponentiellen Backoffs |
+| `DOCUMENT_CORE_INPUT_ROOT_DIR` | `DOCUMENT_CORE_DATA_DIR` | Wurzel aller konfigurierten Hotfolder |
+| `DOCUMENT_CORE_WORK_DIR` | `DOCUMENT_CORE_DATA_DIR` | persistenter Arbeitsbereich |
+| `DOCUMENT_CORE_DESTINATION_ROOT_DIR` | `DOCUMENT_CORE_DATA_DIR` | Wurzel für Dateisystem-Zielsysteme |
+| `DOCUMENT_CORE_DELIVERED_FILE_POLICY` | `retain` | Arbeitskopie nach Zustellung: `retain`, `archive` oder `delete` |
 | `DOCUMENT_CORE_MAX_FILE_SIZE_BYTES` | `26214400` | maximale Dateigröße für Upload und Hotfolder |
 | `DOCUMENT_CORE_MAX_PDF_PAGES` | `100` | maximale Seitenzahl pro PDF |
 | `DOCUMENT_CORE_MAX_IMAGE_PIXELS` | `40000000` | maximale Pixelzahl pro Bild/OCR-Render |
@@ -89,7 +97,7 @@ erreichbar ist, lehnt Document Core neue Eingänge mit `503` ab.
 
 Hotfolder werden persistent in der Datenbank gespeichert und in der Operator-Konsole unter
 **Eingangskanäle** verwaltet. Alternativ steht die API `/v1/input-channels` zur Verfügung.
-`directory` ist immer relativ zu `DOCUMENT_CORE_DATA_DIR`; absolute Pfade und `..` sind
+`directory` ist immer relativ zu `DOCUMENT_CORE_INPUT_ROOT_DIR`; absolute Pfade und `..` sind
 unzulässig. Der Dienst legt den konfigurierten Unterordner beim Speichern automatisch an.
 
 Jeder aktive Kanal wird im durch `DOCUMENT_CORE_HOTFOLDER_INTERVAL` bestimmten Intervall
@@ -107,7 +115,7 @@ des zu diesem Zeitpunkt aktiven Standardziels; ein späterer Standardwechsel ver
 eingegangene Jobs nicht.
 
 Dateisystemziele verwenden einen relativen Ablageordner innerhalb von
-`DOCUMENT_CORE_DATA_DIR`. Pfadvorlagen unterstützen `{document_type}`, `{year}`, `{month}`,
+`DOCUMENT_CORE_DESTINATION_ROOT_DIR`. Pfadvorlagen unterstützen `{document_type}`, `{year}`, `{month}`,
 `{supplier_name}`, `{job_id}` und `{reference}`. Absolute Pfade, `..` und unbekannte Platzhalter werden
 abgelehnt. Externe Windows- oder Netzwerkordner werden als Docker-Volume unterhalb von
 `/data` eingebunden und anschließend als relativer Zielordner konfiguriert.

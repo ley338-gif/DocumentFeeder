@@ -114,7 +114,7 @@
       </section>
       <section class="channel-layout">
         <div>
-          <div class="section-heading"><div><h2>Konfigurierte Kanäle</h2><p>Alle Pfade liegen sicher innerhalb des Datenverzeichnisses.</p></div><button id="reload-channels" class="icon-button" type="button" aria-label="Kanäle aktualisieren">↻</button></div>
+          <div class="section-heading"><div><h2>Konfigurierte Kanäle</h2><p>Alle Pfade liegen sicher innerhalb des konfigurierten Eingangsbereichs.</p></div><button id="reload-channels" class="icon-button" type="button" aria-label="Kanäle aktualisieren">↻</button></div>
           <div id="channel-list" class="channel-list" aria-live="polite"></div>
         </div>
         <aside class="channel-form-card">
@@ -122,7 +122,7 @@
           <h2>Hotfolder anlegen</h2>
           <form id="channel-form" class="channel-form">
             <label>Name<input name="name" placeholder="z. B. Scanner Eingang" required maxlength="100"></label>
-            <label>Unterordner in data/<input name="directory" placeholder="scanner-eingang" required maxlength="300"></label>
+            <label>Unterordner im Eingangsbereich<input name="directory" placeholder="scanner-eingang" required maxlength="300"></label>
             <label>Dateimuster<input name="patterns" value="*.pdf, *.txt" required><small>Kommagetrennt, beispielsweise *.pdf, scan-*.tif</small></label>
             <label class="checkbox"><input name="enabled" type="checkbox" checked><span>Kanal sofort aktivieren</span></label>
             <button class="button primary" type="submit">Kanal anlegen</button>
@@ -228,7 +228,7 @@
         <div class="form-section-heading"><span class="form-step">2</span><div><strong>Verbindung konfigurieren</strong><small id="connector-description"></small></div></div>
         <div class="target-form-grid">
           <label class="wide">Anzeigename<input name="name" placeholder="z. B. Rechnungsarchiv" required maxlength="100"></label>
-          <div class="connector-fields filesystem-fields"><label>Ablageordner in data/<input name="directory" value="output"></label><label>Ordnerstruktur<input name="path_template" value="{document_type}/{year}/{month}/{job_id}"></label></div>
+          <div class="connector-fields filesystem-fields"><label>Ablageordner im Zielbereich<input name="directory" value="output"></label><label>Ordnerstruktur<input name="path_template" value="{document_type}/{year}/{month}/{job_id}"></label></div>
           <div class="connector-fields http-fields"><label>Endpoint-URL<input name="endpoint_url" type="url" placeholder="https://zielsystem.example/documents"></label><label>Healthcheck-URL<input name="healthcheck_url" type="url" placeholder="https://zielsystem.example/health"></label><label>Bearer-Token<input name="bearer_token" type="password" autocomplete="new-password" placeholder="optional"></label></div>
           <div class="connector-fields microsoft_graph-fields"><label>Mandant-ID<input name="graph_tenant_id"></label><label>Client-ID<input name="graph_client_id"></label><label>Client-Secret<input name="graph_client_secret" type="password" autocomplete="new-password"></label><label>Drive-ID<input name="graph_drive_id"></label><label>Zielordner<input name="graph_folder" value="DocumentCore"></label></div>
         </div>

@@ -8,6 +8,10 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="DOCUMENT_CORE_", env_file=".env")
 
     data_dir: Path = Path("data")
+    input_root_dir: Path | None = None
+    work_dir: Path | None = None
+    destination_root_dir: Path | None = None
+    delivered_file_policy: str = Field(default="retain", pattern="^(retain|archive|delete)$")
     database_url: str = "sqlite:///data/document-core.db"
     database_auto_create: bool = True
     hotfolder_interval: float = 2.0
@@ -41,19 +45,35 @@ class Settings(BaseSettings):
 
     @property
     def inbox_dir(self) -> Path:
-        return self.data_dir / "inbox"
+        return self.work_root_dir / "inbox"
+
+    @property
+    def work_root_dir(self) -> Path:
+        return self.work_dir or self.data_dir
+
+    @property
+    def input_root(self) -> Path:
+        return self.input_root_dir or self.data_dir
+
+    @property
+    def destination_root(self) -> Path:
+        return self.destination_root_dir or self.data_dir
 
     @property
     def hotfolder_dir(self) -> Path:
-        return self.data_dir / "hotfolder"
+        return self.input_root / "hotfolder"
 
     @property
     def output_dir(self) -> Path:
-        return self.data_dir / "output"
+        return self.destination_root / "output"
 
     @property
     def quarantine_dir(self) -> Path:
-        return self.data_dir / "quarantine"
+        return self.work_root_dir / "quarantine"
+
+    @property
+    def completed_dir(self) -> Path:
+        return self.work_root_dir / "completed"
 
     @property
     def connector_secret_key_material(self) -> str:
@@ -67,5 +87,6 @@ class Settings(BaseSettings):
             self.hotfolder_dir,
             self.output_dir,
             self.quarantine_dir,
+            self.completed_dir,
         ):
             path.mkdir(parents=True, exist_ok=True)

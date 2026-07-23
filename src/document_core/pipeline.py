@@ -1,6 +1,5 @@
 import hashlib
 import os
-import shutil
 import tempfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -215,7 +214,10 @@ class DocumentPipeline:
             if job.errors:
                 job.status = JobStatus.QUARANTINED
                 target = self.settings.quarantine_dir / f"{job.id}-{job.original_filename}"
-                shutil.copy2(job.stored_path, target)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                if job.stored_path.resolve() != target.resolve():
+                    job.stored_path.replace(target)
+                    job.stored_path = target
                 self._event(
                     job,
                     "review_required",
@@ -226,6 +228,7 @@ class DocumentPipeline:
                 )
             else:
                 job.metadata["destination_reference"] = self._deliver(job)
+                self._finalize_work_copy(job)
                 job.status = JobStatus.DELIVERED
             job.last_error = None
             job.next_attempt_at = None
@@ -326,6 +329,7 @@ class DocumentPipeline:
         job.status = JobStatus.DELIVERING
         try:
             job.metadata["destination_reference"] = self._deliver(job)
+            self._finalize_work_copy(job)
             job.status = JobStatus.DELIVERED
         except Exception as exc:
             error = getattr(self.store, "redact", lambda value: value)(str(exc))
@@ -334,6 +338,29 @@ class DocumentPipeline:
             job.status = JobStatus.FAILED
         self.store.save(job)
         return job
+
+    def _finalize_work_copy(self, job: DocumentJob) -> None:
+        policy = self.settings.delivered_file_policy
+        details: dict[str, object] = {
+            "policy": policy,
+            "completed_at": datetime.now(UTC).isoformat(),
+        }
+        try:
+            if policy == "delete":
+                job.stored_path.unlink(missing_ok=True)
+                details["state"] = "deleted"
+            elif policy == "archive":
+                target = self.settings.completed_dir / f"{job.id}-{job.original_filename}"
+                target.parent.mkdir(parents=True, exist_ok=True)
+                if job.stored_path.resolve() != target.resolve():
+                    job.stored_path.replace(target)
+                    job.stored_path = target
+                details.update({"state": "archived", "path": str(target)})
+            else:
+                details.update({"state": "retained", "path": str(job.stored_path)})
+        except OSError as exc:
+            details.update({"state": "cleanup_failed", "error": str(exc)})
+        job.metadata["work_copy"] = details
 
     def _connector_for(self, job: DocumentJob) -> TargetConnector:
         if not job.target_system_id:

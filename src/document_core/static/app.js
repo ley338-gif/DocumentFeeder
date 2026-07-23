@@ -545,7 +545,7 @@ async function loadTargets() {
             ${target.is_default ? '<span class="badge processing">Standard</span>' : ""}
             <h3>${esc(target.name)}</h3>
           </div>
-          <span class="channel-path">${target.kind === "http" ? esc(target.endpoint_url) : target.kind === "microsoft_graph" ? `${esc(target.graph_drive_id)} / ${esc(target.graph_folder)}` : `data/${esc(target.directory)}`}</span>
+          <span class="channel-path">${target.kind === "http" ? esc(target.endpoint_url) : target.kind === "microsoft_graph" ? `${esc(target.graph_drive_id)} / ${esc(target.graph_folder)}` : `Zielbereich/${esc(target.directory)}`}</span>
           <div class="channel-details">
             <span>Modul <strong>${esc(target.connector_name)} ${esc(target.kind)} · v${esc(modules.find(module => module.id === target.kind)?.version || "—")}</strong></span>
             <span>Funktionen <strong>${target.capabilities.map(esc).join(", ") || "—"}</strong></span>
@@ -554,7 +554,7 @@ async function loadTargets() {
             <span>Letzte Zustellung <strong>${formatTime(target.last_delivery_at)}</strong></span>
             <span>Token <strong>${target.has_bearer_token ? "hinterlegt" : "—"}</strong></span>
             ${target.kind === "microsoft_graph" ? `<span>Entra-App <strong>${esc(target.graph_client_id)}</strong></span><span>Client-Secret <strong>${target.has_graph_client_secret ? "hinterlegt" : "—"}</strong></span>` : ""}
-            ${target.kind === "filesystem" ? `<span>Ablage <strong>data/${esc(target.directory)}/${esc(target.path_template)}</strong></span>` : ""}
+            ${target.kind === "filesystem" ? `<span>Ablage <strong>Zielbereich/${esc(target.directory)}/${esc(target.path_template)}</strong></span>` : ""}
           </div>
           ${target.last_error ? `<div class="channel-error">${esc(target.last_error)}</div>` : ""}
         </div>
@@ -742,7 +742,7 @@ async function loadChannels() {
       <article class="channel-card">
         <div>
           <div class="job-title"><span class="badge ${channel.enabled ? "delivered" : "received"}">${channel.enabled ? "Aktiv" : "Pausiert"}</span><h3>${esc(channel.name)}</h3></div>
-          <span class="channel-path">data/${esc(channel.directory)}</span>
+          <span class="channel-path">Eingangsbereich/${esc(channel.directory)}</span>
           <div class="channel-details">
             <span>Muster <strong>${esc(channel.patterns.join(", "))}</strong></span>
             <span>Letzter Eingang <strong>${formatTime(channel.last_ingested_at)}</strong></span>

@@ -95,7 +95,7 @@ def create_default_connector_registry(
         capabilities=("document", "metadata", "folders", "idempotency"),
         configuration_fields=("directory", "path_template"),
         factory=lambda target: FilesystemConnector(
-            settings.data_dir / target.directory, target.path_template
+            settings.destination_root / target.directory, target.path_template
         ),
     ))
     registry.register(ConnectorModule(

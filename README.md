@@ -8,6 +8,7 @@ Document Core ist eine erweiterbare, domänenneutrale Dokumenten-Pipeline: Dokum
 
 - REST-API und Hotfolder als Eingangskanäle
 - persistente Verwaltung mehrerer Hotfolder mit Dateimustern und Aktivstatus
+- getrennte Speicherrollen für Eingang, Arbeitskopien und Zielablagen mit konfigurierbarem Dateilebenszyklus
 - SHA-256-Deduplizierung mit transparenter Upload-Rückmeldung und persistente Job-Metadaten
 - PostgreSQL-Persistenz mit Alembic-Migrationen und atomaren Statuswechseln
 - asynchrone PostgreSQL-Queue mit separatem Worker, Lease-Recovery und Retry
@@ -47,9 +48,10 @@ Verarbeitungs-, Review-, Retry- und Zustellereignisse. Zustellungen enthalten da
 Zielsystem, die Ablageregel, den Versuch, die Dauer, die externe Referenz und mögliche Fehler.
 
 Beim ersten Start wird `./data/hotfolder` als Standardkanal angelegt. Weitere Hotfolder
-lassen sich in der Operator-Konsole unter **Eingangskanäle** konfigurieren. Alle Pfade sind
-Unterordner von `./data`; erfolgreiche Ergebnisse landen strukturiert unter `./data/output`,
-problematische Dokumente unter `./data/quarantine`.
+lassen sich in der Operator-Konsole unter **Eingangskanäle** konfigurieren. Lokal bleiben
+alle Speicherrollen unter `./data`. Für NAS- und Fileserver-Betrieb lassen sich Eingang,
+Arbeitsbereich und Zielablage getrennt mounten; Details stehen unter
+[Speicherbereiche und Dateilebenszyklus](docs/STORAGE.md).
 
 Docker Compose startet API, Worker und PostgreSQL. Uploads antworten sofort mit
 `202 Accepted` und Status `received`. Der Worker beansprucht Jobs atomar, erneuert während

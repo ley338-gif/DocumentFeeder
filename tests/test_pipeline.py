@@ -56,6 +56,64 @@ def test_text_document_reaches_filesystem_connector(tmp_path: Path):
     assert len(duplicate_events) == 2
 
 
+@pytest.mark.parametrize(
+    ("policy", "expected_state", "expected_parent"),
+    [
+        ("retain", "retained", "inbox"),
+        ("archive", "archived", "completed"),
+        ("delete", "deleted", None),
+    ],
+)
+def test_delivered_work_copy_follows_storage_policy(
+    tmp_path: Path, policy: str, expected_state: str, expected_parent: str | None
+):
+    settings = Settings(
+        input_root_dir=tmp_path / "sources",
+        work_dir=tmp_path / "work",
+        destination_root_dir=tmp_path / "destinations",
+        delivered_file_policy=policy,
+    )
+    settings.create_directories()
+    source = settings.input_root / "bericht.txt"
+    source.write_text("Bericht\nBetreff: Speicherfluss\nReferenz: S-1", encoding="utf-8")
+    pipeline = DocumentPipeline(
+        settings, JobStore("sqlite://"), FilesystemConnector(settings.output_dir)
+    )
+
+    pipeline.ingest(source, "test")
+    job = pipeline.process(pipeline.store.claim_next("worker", 60))
+
+    assert job.status == JobStatus.DELIVERED
+    assert Path(job.metadata["destination_reference"]).is_file()
+    assert job.metadata["work_copy"]["state"] == expected_state
+    assert settings.input_root != settings.work_root_dir
+    assert settings.work_root_dir != settings.destination_root
+    if expected_parent is None:
+        assert not job.stored_path.exists()
+    else:
+        assert job.stored_path.parent == getattr(settings, f"{expected_parent}_dir")
+        assert job.stored_path.is_file()
+
+
+def test_quarantine_moves_work_copy_out_of_inbox(tmp_path: Path):
+    settings = Settings(work_dir=tmp_path / "work")
+    settings.create_directories()
+    source = tmp_path / "unknown.txt"
+    source.write_text("Nicht eindeutig klassifizierbar", encoding="utf-8")
+    pipeline = DocumentPipeline(
+        settings, JobStore("sqlite://"), FilesystemConnector(settings.output_dir)
+    )
+
+    queued = pipeline.ingest(source, "test")
+    inbox_path = queued.stored_path
+    job = pipeline.process(pipeline.store.claim_next("worker", 60))
+
+    assert job.status == JobStatus.QUARANTINED
+    assert not inbox_path.exists()
+    assert job.stored_path.parent == settings.quarantine_dir
+    assert job.stored_path.is_file()
+
+
 def test_extracted_null_bytes_are_removed_before_persistence(tmp_path: Path):
     settings = Settings(data_dir=tmp_path)
     settings.create_directories()

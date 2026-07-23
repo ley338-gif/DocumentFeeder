@@ -506,6 +506,12 @@ def system_status() -> dict:
             "total": len(targets), "enabled": sum(target.enabled for target in targets),
             "errors": len(target_errors),
         },
+        "storage": {
+            "input_root": str(settings.input_root),
+            "work_root": str(settings.work_root_dir),
+            "destination_root": str(settings.destination_root),
+            "delivered_file_policy": settings.delivered_file_policy,
+        },
     }
 
 
@@ -609,10 +615,18 @@ def validate_channel_settings(directory: str, patterns: list[str]) -> tuple[str,
 
 
 def resolve_channel_directory(directory: str) -> Path:
-    root = settings.data_dir.resolve()
+    root = settings.input_root.resolve()
     resolved = (root / directory).resolve()
     if resolved == root or root not in resolved.parents:
         raise HTTPException(status_code=422, detail="Hotfolder liegt außerhalb des Datenverzeichnisses")
+    return resolved
+
+
+def resolve_target_directory(directory: str) -> Path:
+    root = settings.destination_root.resolve()
+    resolved = (root / directory).resolve()
+    if resolved == root or root not in resolved.parents:
+        raise HTTPException(status_code=422, detail="Zielordner liegt außerhalb des Zielbereichs")
     return resolved
 
 
@@ -730,7 +744,13 @@ def validate_target(target: TargetSystem) -> None:
     elif target.endpoint_url:
         raise HTTPException(status_code=422, detail="Dieses Ziel verwendet keine Endpoint-URL")
     if target.kind == "filesystem":
-        target.directory, _ = validate_channel_settings(target.directory, ["*"])
+        if "\\" in target.directory or ":" in target.directory:
+            raise HTTPException(status_code=422, detail="Zielordner muss ein relativer POSIX-Pfad sein")
+        relative = Path(target.directory.strip())
+        if relative.is_absolute() or not relative.parts or ".." in relative.parts:
+            raise HTTPException(status_code=422, detail="Zielordner muss relativ zum Zielbereich sein")
+        target.directory = relative.as_posix()
+        resolve_target_directory(target.directory)
         validate_path_template(target.path_template)
     if target.is_default and not target.enabled:
         raise HTTPException(status_code=422, detail="Das Standardziel muss aktiv sein")
@@ -950,8 +970,8 @@ def get_job_content(job_id: str, download: bool = False) -> FileResponse:
     if job is None:
         raise HTTPException(status_code=404, detail="Job nicht gefunden")
     path = job.stored_path.resolve()
-    inbox = settings.inbox_dir.resolve()
-    if inbox not in path.parents or not path.is_file():
+    work_root = settings.work_root_dir.resolve()
+    if work_root not in path.parents or not path.is_file():
         raise HTTPException(status_code=404, detail="Dokumentinhalt nicht gefunden")
     disposition = "attachment" if download else "inline"
     return FileResponse(path, filename=job.original_filename, content_disposition_type=disposition)
@@ -1014,8 +1034,8 @@ def delete_job(job_id: str) -> Response:
             detail="Nur Jobs in Verarbeitung, manueller Prüfung oder mit Fehler können gelöscht werden",
         )
     stored_path = deleted.stored_path.resolve()
-    inbox = settings.inbox_dir.resolve()
-    if inbox in stored_path.parents:
+    work_root = settings.work_root_dir.resolve()
+    if work_root in stored_path.parents:
         stored_path.unlink(missing_ok=True)
     quarantine_path = settings.quarantine_dir / f"{deleted.id}-{deleted.original_filename}"
     quarantine_path.unlink(missing_ok=True)

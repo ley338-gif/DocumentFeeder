@@ -14,7 +14,7 @@ Ziel: synthetisches Textdokument Ende-zu-Ende vom Eingang zum Dateisystem-Connec
 - Worker/Queue, Lease-Recovery und Retry (umgesetzt)
 - streamingbasierte Ingestion und aufräumsichere Deduplizierung (umgesetzt)
 - zentrale Datei-, PDF-, Bild- und OCR-Ressourcenlimits (umgesetzt)
-- Worker-Metriken, kontrolliertes Shutdown und administrativer Retry
+- Worker-Heartbeats, kontrolliertes Shutdown und administrativer Retry (umgesetzt)
 - Operator-Konsole für Übersicht, Vorschau, Review, Freigabe und Retry (MVP umgesetzt)
 - persistente Verwaltung mehrerer Hotfolder-Eingänge (MVP umgesetzt)
 - Zielsystemprofile und generischer HTTP-Connector mit Mock-Empfänger (MVP umgesetzt)
@@ -32,11 +32,13 @@ Ziel: synthetisches Textdokument Ende-zu-Ende vom Eingang zum Dateisystem-Connec
 - produktiver ClamAV-Betrieb mit Signaturupdates und Monitoring
 - Observability und Betriebsmetriken
 - Admin-Systemstatus mit Worker-Heartbeats, Queue- und Integrationszuständen (MVP umgesetzt)
+- getrennte Speicherrollen und konfigurierbarer Lebenszyklus der Arbeitskopien (umgesetzt)
+- CI mit Ruff, Unit-Tests, PostgreSQL-, Migrations-, Docker-Build- und Container-Smoke-Test (umgesetzt)
 
 ## M3 – KI-Dokumenttyp-Vorschläge (v0.3)
 
 - Provider-neutrales `DocumentClassifier`-Interface (umgesetzt)
-- Vorschlag plus Konfidenz, Modell-/Promptversion und Evidenz
+- Vorschlag plus Konfidenz, Modell-/Promptversion und Evidenz (regelbasierte Basis umgesetzt)
 - Evaluation mit ausschließlich synthetischem/freigegebenem Datensatz
 - Schwellwerte: automatisch, manuelle Prüfung, abweisen
 - Regelbasierter Fallback und Feature Flag

@@ -812,6 +812,12 @@ class JobStore:
                 row.current_job_id = current_job_id
                 row.last_seen_at = now
 
+    def remove_worker_heartbeat(self, worker_id: str) -> None:
+        with self.sessions.begin() as session:
+            session.execute(
+                delete(WorkerHeartbeatRow).where(WorkerHeartbeatRow.worker_id == worker_id)
+            )
+
     def list_worker_heartbeats(self) -> list[dict]:
         with self.sessions() as session:
             rows = session.scalars(

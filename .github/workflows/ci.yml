@@ -117,8 +117,22 @@ jobs:
         run: alembic current --check-heads
 
   docker-build:
-    name: Docker build
+    name: Docker build and smoke test
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: documentcore_smoke
+          POSTGRES_USER: documentcore
+          POSTGRES_PASSWORD: documentcore
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U documentcore -d documentcore_smoke"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v6
       - uses: docker/setup-buildx-action@v4
@@ -127,6 +141,28 @@ jobs:
         with:
           context: .
           push: false
+          load: true
           tags: document-core:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Start application container
+        run: >-
+          docker run --detach --name document-core-smoke --network host
+          --env DOCUMENT_CORE_DATA_DIR=/tmp/document-core
+          --env DOCUMENT_CORE_DATABASE_URL=postgresql+psycopg://documentcore:documentcore@127.0.0.1:5432/documentcore_smoke
+          --env DOCUMENT_CORE_DATABASE_AUTO_CREATE=false
+          --env DOCUMENT_CORE_AUTH_ENABLED=false
+          document-core:ci
+      - name: Wait for health endpoint
+        run: |
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:8000/health | grep --quiet '"status":"ok"'; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs document-core-smoke
+          exit 1
+      - name: Stop smoke-test container
+        if: always()
+        run: docker rm --force document-core-smoke || true

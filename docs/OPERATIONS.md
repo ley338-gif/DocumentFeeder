@@ -54,6 +54,10 @@ docker compose restart worker
 Ein Worker-Neustart verliert keine Jobs. Ein `processing`-Job kann nach Ablauf seiner Lease
 erneut beansprucht werden. Connectoren müssen trotzdem den dokumentierten Idempotenzschlüssel
 verwenden, da ein externer Aufruf und ein Datenbankcommit keine gemeinsame Transaktion bilden.
+Bei `SIGTERM` oder `SIGINT` nimmt der Worker keinen neuen Job mehr an, beendet aber den aktuell
+laufenden Job samt Lease-Heartbeat kontrolliert. Anschließend entfernt er seinen Heartbeat und
+beendet sich. Das Timeout des Container-Orchestrators muss daher länger als die maximal erwartete
+Verarbeitungsdauer eines einzelnen Dokuments sein.
 
 ## Hotfolder verwalten
 

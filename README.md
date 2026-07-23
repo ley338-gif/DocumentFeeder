@@ -4,7 +4,8 @@ Document Core ist eine erweiterbare, domänenneutrale Dokumenten-Pipeline: Dokum
 
 ## Status
 
-**Phase 1 – funktionierende Pipeline ohne KI.** Das MVP enthält:
+**Stand: robuste Pipeline ohne produktive KI.** M1 ist abgeschlossen, M2 weitgehend
+umgesetzt und erste Zielsystem- sowie KI-Schnittstellen aus späteren Meilensteinen sind vorhanden:
 
 - REST-API und Hotfolder als Eingangskanäle
 - persistente Verwaltung mehrerer Hotfolder mit Dateimustern und Aktivstatus

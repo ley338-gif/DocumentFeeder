@@ -1,8 +1,9 @@
 import logging
+import signal
 import socket
 import threading
-import time
 from contextlib import contextmanager
+from types import FrameType
 from uuid import uuid4
 
 from .config import Settings
@@ -37,7 +38,19 @@ def lease_heartbeat(store: JobStore, job_id: str, worker_id: str, lease_seconds:
         heartbeat.join(timeout=1)
 
 
-def run() -> None:
+def install_shutdown_handlers(stop_event: threading.Event) -> None:
+    def request_shutdown(signum: int, _frame: FrameType | None) -> None:
+        logger.info("Shutdown signal %s received; finishing the current job", signum)
+        stop_event.set()
+
+    signal.signal(signal.SIGTERM, request_shutdown)
+    signal.signal(signal.SIGINT, request_shutdown)
+
+
+def run(stop_event: threading.Event | None = None, *, handle_signals: bool = True) -> None:
+    stopping = stop_event or threading.Event()
+    if handle_signals:
+        install_shutdown_handlers(stopping)
     settings = Settings()
     settings.create_directories()
     store = JobStore(
@@ -51,18 +64,24 @@ def run() -> None:
     worker_id = f"{socket.gethostname()}-{uuid4().hex[:8]}"
     logger.info("Worker %s started", worker_id)
 
-    while True:
+    try:
         store.heartbeat_worker(worker_id)
-        job = store.claim_next(worker_id, settings.worker_lease_seconds)
-        if job is None:
-            time.sleep(settings.worker_poll_interval)
-            continue
-        logger.info("Processing job %s, attempt %s", job.id, job.attempt_count)
-        store.heartbeat_worker(worker_id, job.id)
-        with lease_heartbeat(store, job.id, worker_id, settings.worker_lease_seconds):
-            result = pipeline.process(job)
-        logger.info("Job %s finished with status %s", result.id, result.status)
-        store.heartbeat_worker(worker_id)
+        while not stopping.is_set():
+            job = store.claim_next(worker_id, settings.worker_lease_seconds)
+            if job is None:
+                stopping.wait(settings.worker_poll_interval)
+                if not stopping.is_set():
+                    store.heartbeat_worker(worker_id)
+                continue
+            logger.info("Processing job %s, attempt %s", job.id, job.attempt_count)
+            store.heartbeat_worker(worker_id, job.id)
+            with lease_heartbeat(store, job.id, worker_id, settings.worker_lease_seconds):
+                result = pipeline.process(job)
+            logger.info("Job %s finished with status %s", result.id, result.status)
+            store.heartbeat_worker(worker_id)
+    finally:
+        store.remove_worker_heartbeat(worker_id)
+        logger.info("Worker %s stopped cleanly", worker_id)
 
 
 if __name__ == "__main__":

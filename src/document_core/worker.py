@@ -46,6 +46,7 @@ def run() -> None:
         secret_cipher=SecretCipher.from_csv(settings.connector_secret_key_material),
     )
     store.migrate_or_rotate_target_secrets()
+    store.ensure_installation_id()
     pipeline = DocumentPipeline(settings, store, FilesystemConnector(settings.output_dir))
     worker_id = f"{socket.gethostname()}-{uuid4().hex[:8]}"
     logger.info("Worker %s started", worker_id)

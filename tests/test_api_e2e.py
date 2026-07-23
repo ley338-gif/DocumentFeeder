@@ -11,6 +11,7 @@ from document_core.models import JobStatus
 from document_core.pipeline import DocumentPipeline
 from document_core.store import JobStore, TargetSystemRow
 from tests.test_pdf_processing import text_pdf_bytes
+from tests.test_licensing import license_data
 
 
 def configure_api(tmp_path: Path, monkeypatch) -> Settings:
@@ -28,6 +29,28 @@ def process_next_job():
     job = api_module.store.claim_next("test-worker", 60)
     assert job is not None
     return api_module.pipeline.process(job)
+
+
+def test_license_activation_unlocks_connector(tmp_path: Path, monkeypatch):
+    settings = configure_api(tmp_path, monkeypatch)
+    license_key, public_key = license_data(installation_id=None)
+    settings.license_public_key = public_key
+    pipeline = DocumentPipeline(
+        settings, api_module.store, FilesystemConnector(settings.output_dir)
+    )
+    monkeypatch.setattr(api_module, "pipeline", pipeline)
+
+    with TestClient(api_module.app) as client:
+        before = client.get("/v1/license")
+        activated = client.post("/v1/license", json={"license_key": license_key})
+        modules = client.get("/v1/connector-modules")
+
+    assert before.json()["status"] == "missing"
+    assert activated.json()["status"] == "active"
+    assert activated.json()["customer"] == "Beispiel GmbH"
+    assert "license_key" not in activated.json()
+    graph = next(item for item in modules.json() if item["id"] == "microsoft_graph")
+    assert graph["licensed"] is True
 
 
 def test_pdf_upload_reaches_connector_through_http_api(tmp_path: Path, monkeypatch):
@@ -364,8 +387,17 @@ def test_target_systems_can_be_managed_without_exposing_tokens(tmp_path: Path, m
             "/v1/target-systems", json={"name": "Missing", "kind": "not-installed"}
         )
 
-    assert {item["id"] for item in modules.json()} == {"filesystem", "http"}
-    assert all(item["licensed"] for item in modules.json())
+    assert {item["id"] for item in modules.json()} == {
+        "filesystem",
+        "http",
+        "microsoft_graph",
+    }
+    assert all(
+        item["licensed"] for item in modules.json() if item["id"] != "microsoft_graph"
+    )
+    assert next(
+        item for item in modules.json() if item["id"] == "microsoft_graph"
+    )["licensed"] is False
     assert initial.json()[0]["kind"] == "filesystem"
     assert created.status_code == 201
     assert target["has_bearer_token"] is True

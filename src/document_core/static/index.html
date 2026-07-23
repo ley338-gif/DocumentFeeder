@@ -35,6 +35,7 @@
         <button class="nav-button" data-view="users" type="button">Benutzerverwaltung</button>
         <button class="nav-button" data-view="audit" type="button">Systemprotokoll</button>
         <button class="nav-button" data-view="system" type="button">Systemstatus</button>
+        <button class="nav-button" data-view="license" type="button">Lizenz</button>
       </div>
     </nav>
     <div class="sidebar-footer">
@@ -132,35 +133,12 @@
 
     <div id="targets-view" class="hidden">
       <section class="hero channel-hero">
-        <div>
-          <p class="eyebrow">Zustellung</p>
-          <h1>Zielsysteme</h1>
-          <p class="hero-copy">Dateisystem- und HTTP-Ziele konfigurieren und als Standard festlegen.</p>
-        </div>
+        <div><p class="eyebrow">Zustellung</p><h1>Zielsysteme</h1><p class="hero-copy">Ziele übersichtlich verwalten, prüfen und als Standard festlegen.</p></div>
+        <button id="open-target-dialog" class="button primary" type="button">Zielsystem hinzufügen</button>
       </section>
-      <section class="channel-layout">
-        <div>
-          <div class="section-heading"><div><h2>Konfigurierte Ziele</h2><p>Neue Dokumente werden dem aktiven Standardziel zugeordnet.</p></div><button id="reload-targets" class="icon-button" type="button" aria-label="Zielsysteme aktualisieren">↻</button></div>
-          <div id="target-list" class="channel-list" aria-live="polite"></div>
-        </div>
-        <aside class="channel-form-card">
-          <p class="eyebrow">Neues Ziel</p>
-          <h2>Zielsystem anlegen</h2>
-          <form id="target-form" class="channel-form">
-            <label>Name<input name="name" placeholder="z. B. Archiv Sandbox" required maxlength="100"></label>
-            <label>Connector-Modul<select name="kind" id="connector-kind"><option value="">Module werden geladen …</option></select><small>Nur installierte und lizenzierte Module können verwendet werden.</small></label>
-            <label>Endpoint-URL<input name="endpoint_url" type="url" placeholder="http://mock-target:8090/documents"></label>
-            <label>Healthcheck-URL<input name="healthcheck_url" type="url" placeholder="http://mock-target:8090/health"><small>Wird ohne Dokumentübertragung zur Erreichbarkeitsprüfung aufgerufen.</small></label>
-            <label>Ablageordner in data/<input name="directory" value="output" placeholder="output"></label>
-            <label>Ordnerstruktur<input name="path_template" value="{document_type}/{year}/{month}/{job_id}"><small>Platzhalter: document_type, year, month, supplier_name, job_id, reference</small></label>
-            <label>Bearer-Token<input name="bearer_token" type="password" autocomplete="new-password" placeholder="optional"></label>
-            <label>Timeout in Sekunden<input name="timeout_seconds" type="number" value="30" min="1" max="300" required></label>
-            <label>Maximale Antwortgröße<input name="max_response_bytes" type="number" value="65536" min="1024" max="1048576" required><small>Schützt vor übergroßen Antworten des Zielsystems.</small></label>
-            <label class="checkbox"><input name="enabled" type="checkbox" checked><span>Ziel sofort aktivieren</span></label>
-            <label class="checkbox"><input name="is_default" type="checkbox"><span>Als Standardziel verwenden</span></label>
-            <button class="button primary" type="submit">Zielsystem anlegen</button>
-          </form>
-        </aside>
+      <section>
+        <div class="section-heading"><div><h2>Konfigurierte Ziele</h2><p>Neue Dokumente werden dem aktiven Standardziel zugeordnet.</p></div><button id="reload-targets" class="icon-button" type="button" aria-label="Zielsysteme aktualisieren">↻</button></div>
+        <div id="target-list" class="channel-list" aria-live="polite"></div>
       </section>
     </div>
 
@@ -223,9 +201,35 @@
       <section class="hero channel-hero"><div><p class="eyebrow">Administration</p><h1>Systemstatus</h1><p class="hero-copy">Dienste, Verarbeitung und Integrationen auf einen Blick.</p></div><button id="reload-system" class="button" type="button">Status aktualisieren</button></section>
       <section><div id="system-summary" class="system-summary"></div><div id="system-details" class="system-details"></div></section>
     </div>
+    <div id="license-view" class="hidden">
+      <section class="hero channel-hero"><div><p class="eyebrow">Administration</p><h1>Lizenz</h1><p class="hero-copy">Zusatzmodule für diese Installation freischalten.</p></div><button id="reload-license" class="button" type="button">Status aktualisieren</button></section>
+      <section class="license-layout">
+        <article class="panel"><div class="panel-header"><h3>Lizenzstatus</h3><span id="license-badge" class="badge received">Wird geprüft</span></div><div id="license-details" class="system-lines"></div></article>
+        <article class="panel"><div class="panel-header"><h3>Lizenzschlüssel aktivieren</h3></div><form id="license-form" class="channel-form license-form"><label>Lizenzschlüssel<textarea name="license_key" rows="7" required placeholder="DC1.…"></textarea><small>Der Schlüssel wird lokal geprüft. Es ist keine Internetverbindung erforderlich.</small></label><button class="button primary" type="submit">Lizenz aktivieren</button><button id="remove-license" class="button danger hidden" type="button">Lizenz entfernen</button></form></article>
+      </section>
+    </div>
   </main>
 
   <div id="login-screen" class="login-screen hidden"><form id="login-form" class="login-card"><span class="brand-mark">DC</span><p class="eyebrow">Document Core</p><h1>Anmelden</h1><label>Benutzername<input name="username" autocomplete="username" required></label><label>Passwort<input name="password" type="password" autocomplete="current-password" required></label><button class="button primary" type="submit">Anmelden</button><p id="login-error" class="channel-error hidden"></p></form></div>
+
+  <dialog id="target-dialog" class="target-dialog">
+    <form id="target-form" class="target-wizard">
+      <div class="dialog-header"><div><p class="eyebrow">Neues Ziel</p><h2>Zielsystem hinzufügen</h2></div><button id="close-target-dialog" class="dialog-close" type="button" aria-label="Dialog schließen">×</button></div>
+      <div class="target-type-step"><span class="form-step">1</span><label>Welches Zielsystem möchtest du verbinden?<select name="kind" id="connector-kind"><option value="">Module werden geladen …</option></select><small>Nicht lizenzierte Module bleiben sichtbar, können aber erst nach Aktivierung verwendet werden.</small></label></div>
+      <div id="target-configuration" class="hidden">
+        <div class="form-section-heading"><span class="form-step">2</span><div><strong>Verbindung konfigurieren</strong><small id="connector-description"></small></div></div>
+        <div class="target-form-grid">
+          <label class="wide">Anzeigename<input name="name" placeholder="z. B. Rechnungsarchiv" required maxlength="100"></label>
+          <div class="connector-fields filesystem-fields"><label>Ablageordner in data/<input name="directory" value="output"></label><label>Ordnerstruktur<input name="path_template" value="{document_type}/{year}/{month}/{job_id}"></label></div>
+          <div class="connector-fields http-fields"><label>Endpoint-URL<input name="endpoint_url" type="url" placeholder="https://zielsystem.example/documents"></label><label>Healthcheck-URL<input name="healthcheck_url" type="url" placeholder="https://zielsystem.example/health"></label><label>Bearer-Token<input name="bearer_token" type="password" autocomplete="new-password" placeholder="optional"></label></div>
+          <div class="connector-fields microsoft_graph-fields"><label>Mandant-ID<input name="graph_tenant_id"></label><label>Client-ID<input name="graph_client_id"></label><label>Client-Secret<input name="graph_client_secret" type="password" autocomplete="new-password"></label><label>Drive-ID<input name="graph_drive_id"></label><label>Zielordner<input name="graph_folder" value="DocumentCore"></label></div>
+        </div>
+        <details class="advanced-settings"><summary>Erweiterte Einstellungen</summary><div class="target-form-grid"><label>Timeout in Sekunden<input name="timeout_seconds" type="number" value="30" min="1" max="300" required></label><label>Maximale Antwortgröße<input name="max_response_bytes" type="number" value="65536" min="1024" max="1048576" required></label></div></details>
+        <div class="target-options"><label class="checkbox"><input name="enabled" type="checkbox" checked><span>Ziel sofort aktivieren</span></label><label class="checkbox"><input name="is_default" type="checkbox"><span>Als Standardziel verwenden</span></label></div>
+        <div class="dialog-actions"><button id="cancel-target-dialog" class="button" type="button">Abbrechen</button><button class="button primary" type="submit">Zielsystem speichern</button></div>
+      </div>
+    </form>
+  </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script src="/static/app.js" defer></script>

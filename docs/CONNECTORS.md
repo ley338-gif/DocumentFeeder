@@ -106,6 +106,29 @@ Docker Compose enthält unter `http://localhost:8090` ein ausschließlich für E
 bestimmtes Mock-Ziel. Zustellungen an `http://mock-target:8090/documents` werden unter
 `data/mock-target/{job.id}` gespeichert.
 
+## Microsoft OneDrive / SharePoint
+
+Das Modul `microsoft_graph` übergibt Dokumente an ein Drive in OneDrive for Business oder
+eine SharePoint-Dokumentbibliothek. Es ist mit
+`DOCUMENT_CORE_CONNECTOR_ENTITLEMENTS=connector.microsoft_graph` freizuschalten und verwendet
+den OAuth-2.0-Client-Credentials-Flow einer Microsoft-Entra-App. Benötigt werden Mandant-ID,
+Client-ID, Client-Secret, Drive-ID und ein bereits vorhandener Zielordner. Das Client-Secret
+wird verschlüsselt gespeichert und nie über GET-Endpunkte ausgegeben.
+
+Dateien bis 10 MiB werden direkt übertragen. Größere Dateien verwenden eine Graph-Upload-Session
+mit sequenziellen 10-MiB-Blöcken; die Blockgröße ist ein Vielfaches von 320 KiB. Die
+vorautorisierte Upload-URL erhält bewusst keinen zusätzlichen Authorization-Header. Diese
+Vorgaben entsprechen dem
+[Microsoft-Graph-Vertrag für Upload-Sessions](https://learn.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0).
+Der Remote-Dateiname beginnt mit der Job-ID und bleibt dadurch bei einem erneuten Zustellversuch
+stabil. Die Quittung enthält Drive-ID, Zielpfad, DriveItem-ID und – falls vorhanden – die
+Web-URL.
+
+Die Entra-App benötigt Schreibzugriff auf das konfigurierte Drive. Microsoft nennt für
+Anwendungsberechtigungen `Sites.ReadWrite.All`; produktiv sollte der Zugriff nach Möglichkeit
+weiter auf ausgewählte Sites beschränkt werden. Der Healthcheck bezieht ein App-Token und liest
+das konfigurierte Drive, ohne ein Dokument anzulegen.
+
 ## Zielsystem-Adapter
 
 Vor Implementierung eines konkreten Adapters muss die verfügbare Integrationsform geklärt

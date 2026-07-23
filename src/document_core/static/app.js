@@ -1,7 +1,8 @@
 const state = {
   jobs: [], total: 0, limit: 20, offset: 0, selectedId: null,
   selectedUpdatedAt: null, selectedStatus: null, reviewDirty: false, targets: [],
-  jobsSignature: null, statsSignature: null, status: "", query: "", currentUser: null
+  jobsSignature: null, statsSignature: null, status: "", query: "", currentUser: null,
+  connectorModules: []
 };
 const labels = {
   received: "Eingegangen", processing: "In Verarbeitung", quarantined: "Zu prüfen",
@@ -336,6 +337,7 @@ function switchView(view, sourceButton = null) {
   $("#users-view").classList.toggle("hidden", view !== "users");
   $("#audit-view").classList.toggle("hidden", view !== "audit");
   $("#system-view").classList.toggle("hidden", view !== "system");
+  $("#license-view").classList.toggle("hidden", view !== "license");
   if (sourceButton) {
     document.querySelectorAll(".nav-button").forEach(button => button.classList.toggle("active", button === sourceButton));
   }
@@ -350,6 +352,7 @@ function switchView(view, sourceButton = null) {
   if (view === "users") loadUsers();
   if (view === "audit") loadAuditEvents();
   if (view === "system") loadSystemStatus();
+  if (view === "license") loadLicense();
 }
 
 function statusLabel(status) { return status === "ok" ? "Bereit" : status === "disabled" ? "Deaktiviert" : status === "paused" ? "Pausiert" : status === "stale" ? "Veraltet" : status === "warning" ? "Warnung" : "Fehler"; }
@@ -454,8 +457,9 @@ async function loadTargets() {
   try {
     const [targets, modules] = await Promise.all([api("/v1/target-systems"), api("/v1/connector-modules")]);
     state.targets = targets;
+    state.connectorModules = modules;
     const kindSelect = $("#connector-kind");
-    if (kindSelect) kindSelect.innerHTML = modules.map(module => `<option value="${esc(module.id)}" ${module.licensed ? "" : "disabled"}>${esc(module.name)} ${module.licensed ? "" : "(Lizenz erforderlich)"}</option>`).join("");
+    if (kindSelect) kindSelect.innerHTML = '<option value="">Bitte auswählen</option>' + modules.map(module => `<option value="${esc(module.id)}" ${module.licensed ? "" : "disabled"}>${esc(module.name)} ${module.licensed ? "" : "(Lizenz erforderlich)"}</option>`).join("");
     const ruleTarget = $("#rule-form")?.elements.target_system_id;
     if (ruleTarget) ruleTarget.innerHTML = state.targets.filter(target => target.enabled).map(target => `<option value="${target.id}">${esc(target.name)}</option>`).join("");
     const list = $("#target-list");
@@ -467,7 +471,7 @@ async function loadTargets() {
             ${target.is_default ? '<span class="badge processing">Standard</span>' : ""}
             <h3>${esc(target.name)}</h3>
           </div>
-          <span class="channel-path">${target.kind === "http" ? esc(target.endpoint_url) : `data/${esc(target.directory)}`}</span>
+          <span class="channel-path">${target.kind === "http" ? esc(target.endpoint_url) : target.kind === "microsoft_graph" ? `${esc(target.graph_drive_id)} / ${esc(target.graph_folder)}` : `data/${esc(target.directory)}`}</span>
           <div class="channel-details">
             <span>Modul <strong>${esc(target.connector_name)} ${esc(target.kind)} · v${esc(modules.find(module => module.id === target.kind)?.version || "—")}</strong></span>
             <span>Funktionen <strong>${target.capabilities.map(esc).join(", ") || "—"}</strong></span>
@@ -475,6 +479,7 @@ async function loadTargets() {
             ${target.healthcheck_url ? `<span>Healthcheck <strong>${esc(target.healthcheck_url)}</strong></span>` : ""}
             <span>Letzte Zustellung <strong>${formatTime(target.last_delivery_at)}</strong></span>
             <span>Token <strong>${target.has_bearer_token ? "hinterlegt" : "—"}</strong></span>
+            ${target.kind === "microsoft_graph" ? `<span>Entra-App <strong>${esc(target.graph_client_id)}</strong></span><span>Client-Secret <strong>${target.has_graph_client_secret ? "hinterlegt" : "—"}</strong></span>` : ""}
             ${target.kind === "filesystem" ? `<span>Ablage <strong>data/${esc(target.directory)}/${esc(target.path_template)}</strong></span>` : ""}
           </div>
           ${target.last_error ? `<div class="channel-error">${esc(target.last_error)}</div>` : ""}
@@ -525,6 +530,11 @@ async function createTarget(event) {
     directory: form.get("directory") || "output",
     path_template: form.get("path_template") || "{document_type}/{job_id}",
     bearer_token: form.get("bearer_token") || null,
+    graph_tenant_id: kind === "microsoft_graph" ? (form.get("graph_tenant_id") || null) : null,
+    graph_client_id: kind === "microsoft_graph" ? (form.get("graph_client_id") || null) : null,
+    graph_client_secret: kind === "microsoft_graph" ? (form.get("graph_client_secret") || null) : null,
+    graph_drive_id: kind === "microsoft_graph" ? (form.get("graph_drive_id") || null) : null,
+    graph_folder: kind === "microsoft_graph" ? (form.get("graph_folder") || "DocumentCore") : "DocumentCore",
     timeout_seconds: Number(form.get("timeout_seconds")),
     max_response_bytes: Number(form.get("max_response_bytes")),
     enabled: form.get("enabled") === "on", is_default: form.get("is_default") === "on"
@@ -532,7 +542,63 @@ async function createTarget(event) {
   try {
     await api("/v1/target-systems", {method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body)});
     targetForm.reset(); targetForm.elements.enabled.checked = true; targetForm.elements.timeout_seconds.value = 30; targetForm.elements.max_response_bytes.value = 65536;
+    $("#target-dialog").close(); $("#target-configuration").classList.add("hidden");
     toast("Zielsystem angelegt"); await loadTargets();
+  } catch (error) { toast(error.message, true); }
+}
+
+function configureTargetForm() {
+  const kind = $("#connector-kind").value;
+  $("#target-configuration").classList.toggle("hidden", !kind);
+  document.querySelectorAll(".connector-fields").forEach(group => group.classList.add("hidden"));
+  if (kind) document.querySelector(`.${kind}-fields`)?.classList.remove("hidden");
+  const module = state.connectorModules.find(item => item.id === kind);
+  $("#connector-description").textContent = module ? `${module.name} · ${module.capabilities.join(", ")}` : "";
+}
+
+async function openTargetDialog() {
+  await loadTargets();
+  $("#target-form").reset();
+  $("#target-form").elements.enabled.checked = true;
+  $("#target-form").elements.timeout_seconds.value = 30;
+  $("#target-form").elements.max_response_bytes.value = 65536;
+  $("#target-configuration").classList.add("hidden");
+  $("#target-dialog").showModal();
+}
+
+async function loadLicense() {
+  try {
+    const license = await api("/v1/license");
+    const active = license.status === "active";
+    $("#license-badge").className = `badge ${active ? "delivered" : license.status === "invalid" ? "failed" : "received"}`;
+    $("#license-badge").textContent = active ? "Aktiv" : license.status === "invalid" ? "Ungültig" : "Nicht aktiviert";
+    $("#license-details").innerHTML = `
+      <div class="system-line"><span>Installation-ID</span><strong class="license-id">${esc(license.installation_id)}</strong></div>
+      <div class="system-line"><span>Kunde</span><strong>${esc(license.customer)}</strong></div>
+      <div class="system-line"><span>Gültig bis</span><strong>${formatTime(license.expires_at)}</strong></div>
+      <div class="system-line"><span>Freigeschaltete Module</span><strong>${license.features.map(esc).join(", ") || "—"}</strong></div>
+      ${license.detail ? `<div class="system-line"><span>Hinweis</span><strong>${esc(license.detail)}</strong></div>` : ""}`;
+    $("#remove-license").classList.toggle("hidden", !active);
+  } catch (error) { toast(error.message, true); }
+}
+
+async function activateLicense(event) {
+  event.preventDefault();
+  const licenseKey = new FormData(event.currentTarget).get("license_key").trim();
+  try {
+    await api("/v1/license", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({license_key: licenseKey})});
+    event.currentTarget.reset();
+    toast("Lizenz aktiviert");
+    await Promise.all([loadLicense(), loadTargets()]);
+  } catch (error) { toast(error.message, true); }
+}
+
+async function removeLicense() {
+  if (!window.confirm("Lizenz wirklich entfernen? Lizenzierte Connectoren werden gesperrt.")) return;
+  try {
+    await api("/v1/license", {method: "DELETE"});
+    toast("Lizenz entfernt");
+    await Promise.all([loadLicense(), loadTargets()]);
   } catch (error) { toast(error.message, true); }
 }
 
@@ -664,12 +730,19 @@ document.querySelectorAll(".nav-button").forEach(button => button.addEventListen
 $("#channel-form").addEventListener("submit", createChannel);
 $("#reload-channels").addEventListener("click", loadChannels);
 $("#target-form").addEventListener("submit", createTarget);
+$("#connector-kind").addEventListener("change", configureTargetForm);
+$("#open-target-dialog").addEventListener("click", openTargetDialog);
+$("#close-target-dialog").addEventListener("click", () => $("#target-dialog").close());
+$("#cancel-target-dialog").addEventListener("click", () => $("#target-dialog").close());
 $("#reload-targets").addEventListener("click", loadTargets);
 $("#rule-form").addEventListener("submit", createRule);
 $("#user-form").addEventListener("submit", createUser);
 $("#reload-users").addEventListener("click", loadUsers);
 $("#reload-audit").addEventListener("click", loadAuditEvents);
 $("#reload-system").addEventListener("click", loadSystemStatus);
+$("#license-form").addEventListener("submit", activateLicense);
+$("#reload-license").addEventListener("click", loadLicense);
+$("#remove-license").addEventListener("click", removeLicense);
 $("#audit-outcome").addEventListener("change", loadAuditEvents);
 $("#audit-search").addEventListener("input", event => { window.clearTimeout(state.auditTimer); state.auditTimer = window.setTimeout(loadAuditEvents, 250); });
 $("#login-form").addEventListener("submit", login);

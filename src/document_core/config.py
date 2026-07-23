@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     worker_retry_base_seconds: int = 5
     connector: str = "filesystem"
     connector_entitlements: str = ""
+    license_public_key: str = ""
     connector_secret_keys: str = ""
     connector_secret_keys_file: Path | None = None
     require_routing_reference: bool = False

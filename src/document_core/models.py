@@ -203,6 +203,11 @@ class TargetSystem(BaseModel):
         default="{document_type}/{job_id}", min_length=1, max_length=500
     )
     bearer_token: str | None = Field(default=None, max_length=2000, repr=False)
+    graph_tenant_id: str | None = Field(default=None, max_length=200)
+    graph_client_id: str | None = Field(default=None, max_length=200)
+    graph_client_secret: str | None = Field(default=None, max_length=2000, repr=False)
+    graph_drive_id: str | None = Field(default=None, max_length=300)
+    graph_folder: str = Field(default="DocumentCore", max_length=500)
     timeout_seconds: int = Field(default=30, ge=1, le=300)
     max_response_bytes: int = Field(default=65536, ge=1024, le=1048576)
     enabled: bool = True
@@ -225,6 +230,11 @@ class TargetSystemView(BaseModel):
     directory: str
     path_template: str
     has_bearer_token: bool
+    graph_tenant_id: str | None
+    graph_client_id: str | None
+    has_graph_client_secret: bool
+    graph_drive_id: str | None
+    graph_folder: str
     timeout_seconds: int
     max_response_bytes: int
     enabled: bool
@@ -245,6 +255,11 @@ class TargetSystemCreate(BaseModel):
         default="{document_type}/{job_id}", min_length=1, max_length=500
     )
     bearer_token: str | None = Field(default=None, max_length=2000)
+    graph_tenant_id: str | None = Field(default=None, max_length=200)
+    graph_client_id: str | None = Field(default=None, max_length=200)
+    graph_client_secret: str | None = Field(default=None, max_length=2000)
+    graph_drive_id: str | None = Field(default=None, max_length=300)
+    graph_folder: str = Field(default="DocumentCore", max_length=500)
     timeout_seconds: int = Field(default=30, ge=1, le=300)
     max_response_bytes: int = Field(default=65536, ge=1024, le=1048576)
     enabled: bool = True
@@ -259,10 +274,30 @@ class TargetSystemUpdate(BaseModel):
     path_template: str | None = Field(default=None, min_length=1, max_length=500)
     bearer_token: str | None = Field(default=None, max_length=2000)
     clear_bearer_token: bool = False
+    graph_tenant_id: str | None = Field(default=None, max_length=200)
+    graph_client_id: str | None = Field(default=None, max_length=200)
+    graph_client_secret: str | None = Field(default=None, max_length=2000)
+    clear_graph_client_secret: bool = False
+    graph_drive_id: str | None = Field(default=None, max_length=300)
+    graph_folder: str | None = Field(default=None, max_length=500)
     timeout_seconds: int | None = Field(default=None, ge=1, le=300)
     max_response_bytes: int | None = Field(default=None, ge=1024, le=1048576)
     enabled: bool | None = None
     is_default: bool | None = None
+
+
+class LicenseActivationRequest(BaseModel):
+    license_key: str = Field(min_length=20, max_length=10000)
+
+
+class LicenseStatusView(BaseModel):
+    status: str
+    configured: bool
+    installation_id: str
+    customer: str | None = None
+    features: list[str] = Field(default_factory=list)
+    expires_at: datetime | None = None
+    detail: str | None = None
 
 
 class DeliveryRule(BaseModel):

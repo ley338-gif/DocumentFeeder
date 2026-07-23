@@ -18,7 +18,11 @@ from sqlalchemy.exc import IntegrityError
 from .config import Settings
 from .auth import hash_password, new_csrf_token, new_session_token, verify_password
 from .connectors import FilesystemConnector
-from .licensing import EntitlementRequiredError
+from .licensing import (
+    EntitlementRequiredError,
+    LicenseValidationError,
+    LicenseVerifier,
+)
 from .file_validation import DocumentRejectedError, FileTooLargeError
 from .models import (
     DocumentJob,
@@ -34,6 +38,8 @@ from .models import (
     JobListResponse,
     JobStatsResponse,
     JobStatus,
+    LicenseActivationRequest,
+    LicenseStatusView,
     ReviewRequest,
     TargetSystem,
     TargetSystemCreate,
@@ -91,6 +97,7 @@ async def watch_hotfolder() -> None:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     store.migrate_or_rotate_target_secrets()
+    store.ensure_installation_id()
     if settings.auth_enabled and not store.list_users():
         if not settings.bootstrap_admin_password:
             raise RuntimeError("Bootstrap-Admin-Passwort muss für die erste Anmeldung gesetzt sein")
@@ -153,7 +160,9 @@ async def authorize(request: Request, call_next):
         csrf_header = request.headers.get("X-CSRF-Token")
         if not csrf_cookie or not csrf_header or not hmac.compare_digest(csrf_cookie, csrf_header):
             return JSONResponse({"detail": "Ungültiger CSRF-Schutz"}, status_code=403)
-    if path.startswith(("/v1/users", "/v1/audit-events", "/v1/system-status")) and user.role != UserRole.ADMIN:
+    if path.startswith(
+        ("/v1/users", "/v1/audit-events", "/v1/system-status", "/v1/license")
+    ) and user.role != UserRole.ADMIN:
         return JSONResponse({"detail": "Administratorrechte erforderlich"}, status_code=403)
     configuration = ("/v1/input-channels", "/v1/target-systems", "/v1/delivery-rules")
     if path.startswith(configuration) and not safe_method and user.role != UserRole.ADMIN:
@@ -380,6 +389,67 @@ def control_malware_scanner(enabled: bool = Body(embed=True)) -> dict:
     return {"enabled": enabled, "status": "enabled" if enabled else "paused"}
 
 
+def license_status_view() -> LicenseStatusView:
+    installation_id = store.ensure_installation_id()
+    verifier = LicenseVerifier(settings.license_public_key)
+    license_key = store.get_system_setting("license_key")
+    if not verifier.configured:
+        return LicenseStatusView(
+            status="not_configured",
+            configured=False,
+            installation_id=installation_id,
+            detail="Öffentlicher Lizenzschlüssel ist nicht konfiguriert",
+        )
+    if not license_key:
+        return LicenseStatusView(
+            status="missing",
+            configured=True,
+            installation_id=installation_id,
+            detail="Keine Lizenz aktiviert",
+        )
+    try:
+        verified = verifier.verify(license_key, installation_id)
+    except LicenseValidationError as exc:
+        return LicenseStatusView(
+            status="invalid",
+            configured=True,
+            installation_id=installation_id,
+            detail=str(exc),
+        )
+    return LicenseStatusView(
+        status="active",
+        configured=True,
+        installation_id=installation_id,
+        customer=verified.customer,
+        features=sorted(verified.features),
+        expires_at=verified.expires_at,
+    )
+
+
+@app.get("/v1/license", response_model=LicenseStatusView)
+def get_license_status() -> LicenseStatusView:
+    return license_status_view()
+
+
+@app.post("/v1/license", response_model=LicenseStatusView)
+def activate_license(request: LicenseActivationRequest) -> LicenseStatusView:
+    installation_id = store.ensure_installation_id()
+    try:
+        LicenseVerifier(settings.license_public_key).verify(
+            request.license_key, installation_id
+        )
+    except LicenseValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    store.set_system_setting("license_key", request.license_key.strip())
+    return license_status_view()
+
+
+@app.delete("/v1/license", status_code=204)
+def remove_license() -> Response:
+    store.set_system_setting("license_key", "")
+    return Response(status_code=204)
+
+
 @app.get("/", include_in_schema=False)
 def operator_console() -> FileResponse:
     return FileResponse(static_dir / "index.html")
@@ -476,8 +546,9 @@ def target_view(target: TargetSystem) -> TargetSystemView:
     connector_registry = pipeline.connector_registry
     module = connector_registry.get(target.kind)
     return TargetSystemView(
-        **target.model_dump(exclude={"bearer_token"}),
+        **target.model_dump(exclude={"bearer_token", "graph_client_secret"}),
         has_bearer_token=bool(target.bearer_token),
+        has_graph_client_secret=bool(target.graph_client_secret),
         connector_name=module.name if module else target.kind,
         capabilities=list(module.capabilities) if module else [],
         licensed=bool(module and connector_registry.entitlements.allows(module.license_feature)),
@@ -489,7 +560,7 @@ def validate_target(target: TargetSystem) -> None:
     target.name = target.name.strip()
     if not target.name:
         raise HTTPException(status_code=422, detail="Name darf nicht leer sein")
-    if target.bearer_token and not store.secret_cipher.available:
+    if (target.bearer_token or target.graph_client_secret) and not store.secret_cipher.available:
         raise HTTPException(
             status_code=503,
             detail="Connector-Secrets sind nicht konfiguriert",
@@ -510,8 +581,26 @@ def validate_target(target: TargetSystem) -> None:
                 raise HTTPException(
                     status_code=422, detail="Healthcheck benötigt eine gültige HTTP-URL"
                 )
+    elif target.kind == "microsoft_graph":
+        required = {
+            "Mandant-ID": target.graph_tenant_id,
+            "Client-ID": target.graph_client_id,
+            "Client-Secret": target.graph_client_secret,
+            "Drive-ID": target.graph_drive_id,
+        }
+        missing = [name for name, value in required.items() if not value]
+        if missing:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Microsoft Graph benötigt: {', '.join(missing)}",
+            )
+        target.graph_folder = target.graph_folder.strip().strip("/")
+        if not target.graph_folder or any(
+            part in {"", ".", ".."} for part in target.graph_folder.split("/")
+        ):
+            raise HTTPException(status_code=422, detail="Ungültiger Microsoft-Graph-Zielordner")
     elif target.endpoint_url:
-        raise HTTPException(status_code=422, detail="Dateisystem-Ziele haben keine Endpoint-URL")
+        raise HTTPException(status_code=422, detail="Dieses Ziel verwendet keine Endpoint-URL")
     if target.kind == "filesystem":
         target.directory, _ = validate_channel_settings(target.directory, ["*"])
         validate_path_template(target.path_template)
@@ -582,11 +671,16 @@ def update_target_system(target_id: str, request: TargetSystemUpdate) -> TargetS
     target = store.get_target_system(target_id)
     if target is None:
         raise HTTPException(status_code=404, detail="Zielsystem nicht gefunden")
-    values = request.model_dump(exclude_unset=True, exclude={"clear_bearer_token"})
+    values = request.model_dump(
+        exclude_unset=True,
+        exclude={"clear_bearer_token", "clear_graph_client_secret"},
+    )
     for key, value in values.items():
         setattr(target, key, value)
     if request.clear_bearer_token:
         target.bearer_token = None
+    if request.clear_graph_client_secret:
+        target.graph_client_secret = None
     validate_target(target)
     try:
         store.save_target_system(target)

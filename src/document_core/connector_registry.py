@@ -2,8 +2,13 @@ from dataclasses import dataclass
 from typing import Callable
 
 from .config import Settings
-from .connectors import FilesystemConnector, HttpConnector, TargetConnector
-from .licensing import EntitlementService
+from .connectors import (
+    FilesystemConnector,
+    HttpConnector,
+    MicrosoftGraphConnector,
+    TargetConnector,
+)
+from .licensing import EntitlementService, LicenseValidationError, LicenseVerifier
 from .models import TargetSystem
 
 
@@ -61,8 +66,28 @@ class ConnectorRegistry:
         ]
 
 
-def create_default_connector_registry(settings: Settings) -> ConnectorRegistry:
-    registry = ConnectorRegistry(EntitlementService.from_csv(settings.connector_entitlements))
+def create_default_connector_registry(
+    settings: Settings,
+    license_key_provider: Callable[[], tuple[str | None, str]] | None = None,
+) -> ConnectorRegistry:
+    dynamic_features = None
+    if license_key_provider is not None:
+        verifier = LicenseVerifier(settings.license_public_key)
+
+        def licensed_features() -> frozenset[str]:
+            license_key, installation_id = license_key_provider()
+            if not license_key:
+                return frozenset()
+            try:
+                return verifier.verify(license_key, installation_id).features
+            except LicenseValidationError:
+                return frozenset()
+
+        dynamic_features = licensed_features
+    static = EntitlementService.from_csv(settings.connector_entitlements)
+    registry = ConnectorRegistry(
+        EntitlementService(static.enabled_features, dynamic_features)
+    )
     registry.register(ConnectorModule(
         id="filesystem",
         name="Dateisystem",
@@ -83,5 +108,28 @@ def create_default_connector_registry(settings: Settings) -> ConnectorRegistry:
         ),
         secret_fields=("bearer_token",),
         factory=HttpConnector,
+    ))
+    registry.register(ConnectorModule(
+        id="microsoft_graph",
+        name="Microsoft OneDrive / SharePoint",
+        version="1.0",
+        capabilities=(
+            "document",
+            "folders",
+            "authentication",
+            "idempotency",
+            "healthcheck",
+        ),
+        license_feature="connector.microsoft_graph",
+        configuration_fields=(
+            "graph_tenant_id",
+            "graph_client_id",
+            "graph_drive_id",
+            "graph_folder",
+            "timeout_seconds",
+            "max_response_bytes",
+        ),
+        secret_fields=("graph_client_secret",),
+        factory=MicrosoftGraphConnector,
     ))
     return registry

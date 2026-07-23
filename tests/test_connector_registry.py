@@ -44,5 +44,13 @@ def test_default_registry_exposes_core_modules(tmp_path: Path):
 
     descriptions = create_default_connector_registry(Settings(data_dir=tmp_path)).describe()
 
-    assert {item["id"] for item in descriptions} == {"filesystem", "http"}
-    assert all(item["licensed"] for item in descriptions)
+    assert {item["id"] for item in descriptions} == {
+        "filesystem",
+        "http",
+        "microsoft_graph",
+    }
+    by_id = {item["id"]: item for item in descriptions}
+    assert by_id["filesystem"]["licensed"] is True
+    assert by_id["http"]["licensed"] is True
+    assert by_id["microsoft_graph"]["licensed"] is False
+    assert by_id["microsoft_graph"]["license_feature"] == "connector.microsoft_graph"

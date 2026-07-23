@@ -35,6 +35,27 @@ def test_target_secret_is_encrypted_at_rest(tmp_path: Path):
     assert store.get_target_system(target.id).bearer_token == "super-secret"
 
 
+def test_graph_client_secret_is_encrypted_at_rest(tmp_path: Path):
+    store = JobStore(database_url(tmp_path), secret_cipher=SecretCipher([OLD_KEY]))
+    target = TargetSystem(
+        name="Graph",
+        kind="microsoft_graph",
+        graph_client_secret="graph-secret",
+    )
+
+    store.save_target_system(target)
+
+    with store.sessions() as session:
+        persisted = session.scalar(
+            select(TargetSystemRow.graph_client_secret).where(
+                TargetSystemRow.id == target.id
+            )
+        )
+    assert persisted.startswith(ENCRYPTED_PREFIX)
+    assert "graph-secret" not in persisted
+    assert store.get_target_system(target.id).graph_client_secret == "graph-secret"
+
+
 def test_keys_are_rotated_on_store_start(tmp_path: Path):
     url = database_url(tmp_path)
     initial = JobStore(url, secret_cipher=SecretCipher([OLD_KEY]))

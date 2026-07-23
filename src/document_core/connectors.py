@@ -4,6 +4,7 @@ import mimetypes
 import re
 import shutil
 import urllib.error
+import urllib.parse
 import urllib.request
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -319,6 +320,212 @@ class HttpConnector(TargetConnector):
         try:
             with urllib.request.urlopen(request, timeout=self.target.timeout_seconds) as response:
                 self._read_limited(response)
+                return 200 <= response.status < 400
+        except (
+            ConnectorDeliveryError,
+            urllib.error.HTTPError,
+            urllib.error.URLError,
+            TimeoutError,
+        ):
+            return False
+
+
+class MicrosoftGraphConnector(TargetConnector):
+    """OneDrive/SharePoint document delivery using Microsoft Graph app credentials."""
+
+    graph_base_url = "https://graph.microsoft.com/v1.0"
+    max_simple_upload_bytes = 10 * 1024 * 1024
+    upload_chunk_bytes = 10 * 1024 * 1024
+    temporary_statuses = HttpConnector.temporary_statuses
+
+    def __init__(self, target: TargetSystem):
+        required = {
+            "Mandant-ID": target.graph_tenant_id,
+            "Client-ID": target.graph_client_id,
+            "Client-Secret": target.graph_client_secret,
+            "Drive-ID": target.graph_drive_id,
+        }
+        missing = [name for name, value in required.items() if not value]
+        if missing:
+            raise ValueError(f"Microsoft Graph benötigt: {', '.join(missing)}")
+        self.target = target
+
+    def _read_json(self, response) -> dict:
+        body = response.read(self.target.max_response_bytes + 1)
+        if len(body) > self.target.max_response_bytes:
+            raise PermanentConnectorError("Microsoft-Graph-Antwort überschreitet das Größenlimit")
+        try:
+            data = json.loads(body) if body else {}
+        except json.JSONDecodeError as exc:
+            raise PermanentConnectorError("Microsoft Graph lieferte ungültiges JSON") from exc
+        if not isinstance(data, dict):
+            raise PermanentConnectorError("Microsoft-Graph-Antwort muss ein JSON-Objekt sein")
+        return data
+
+    def _raise_http_error(self, exc: urllib.error.HTTPError) -> None:
+        detail = exc.read(min(self.target.max_response_bytes, 500)).decode(
+            "utf-8", errors="replace"
+        )
+        message = f"Microsoft Graph antwortete mit {exc.code}: {detail}"
+        if exc.code in self.temporary_statuses:
+            raise TemporaryConnectorError(
+                message,
+                status_code=exc.code,
+                retry_after_seconds=parse_retry_after(exc.headers.get("Retry-After")),
+            ) from exc
+        raise PermanentConnectorError(message, status_code=exc.code) from exc
+
+    def _access_token(self) -> str:
+        token_url = (
+            "https://login.microsoftonline.com/"
+            f"{urllib.parse.quote(self.target.graph_tenant_id or '', safe='')}"
+            "/oauth2/v2.0/token"
+        )
+        body = urllib.parse.urlencode(
+            {
+                "client_id": self.target.graph_client_id,
+                "client_secret": self.target.graph_client_secret,
+                "scope": "https://graph.microsoft.com/.default",
+                "grant_type": "client_credentials",
+            }
+        ).encode("ascii")
+        request = urllib.request.Request(
+            token_url,
+            data=body,
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Accept": "application/json",
+                "User-Agent": "Document-Core/0.1",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=self.target.timeout_seconds) as response:
+                token = self._read_json(response).get("access_token")
+                if not isinstance(token, str) or not token:
+                    raise PermanentConnectorError(
+                        "Microsoft-Identitätsplattform lieferte kein Zugriffstoken"
+                    )
+                return token
+        except urllib.error.HTTPError as exc:
+            self._raise_http_error(exc)
+        except (urllib.error.URLError, TimeoutError) as exc:
+            raise TemporaryConnectorError(
+                "Microsoft-Identitätsplattform nicht erreichbar"
+            ) from exc
+        raise PermanentConnectorError("Zugriffstoken konnte nicht bezogen werden")
+
+    def _authorization(self) -> dict[str, str]:
+        return {
+            "Authorization": f"Bearer {self._access_token()}",
+            "Accept": "application/json",
+            "User-Agent": "Document-Core/0.1",
+        }
+
+    def deliver(self, job: DocumentJob) -> DeliveryReceipt:
+        size = job.stored_path.stat().st_size
+        safe_filename = re.sub(r'[\\/:*?"<>|\r\n]+', "_", Path(job.original_filename).name)
+        remote_name = f"{job.id}_{safe_filename}"
+        folder = (self.target.graph_folder or "").strip().strip("/")
+        remote_path = "/".join(part for part in (folder, remote_name) if part)
+        encoded_path = urllib.parse.quote(remote_path, safe="/")
+        drive_id = urllib.parse.quote(self.target.graph_drive_id or "", safe="")
+        item_url = f"{self.graph_base_url}/drives/{drive_id}/root:/{encoded_path}:"
+        try:
+            if size <= self.max_simple_upload_bytes:
+                headers = self._authorization() | {
+                    "Content-Type": mimetypes.guess_type(safe_filename)[0]
+                    or "application/octet-stream",
+                    "Content-Length": str(size),
+                }
+                with job.stored_path.open("rb") as source:
+                    request = urllib.request.Request(
+                        f"{item_url}/content", data=source, headers=headers, method="PUT"
+                    )
+                    with urllib.request.urlopen(
+                        request, timeout=self.target.timeout_seconds
+                    ) as response:
+                        data = self._read_json(response)
+                        status = response.status
+                        content_type = response.headers.get("Content-Type")
+            else:
+                data, status, content_type = self._upload_large(job, item_url, size)
+            reference = str(data.get("id") or data.get("webUrl") or remote_path)
+            return DeliveryReceipt(
+                reference=reference,
+                connector="microsoft_graph",
+                status_code=status,
+                content_type=content_type,
+                details={
+                    "drive_id": self.target.graph_drive_id,
+                    "path": remote_path,
+                    "web_url": data.get("webUrl"),
+                    "name": data.get("name"),
+                },
+            )
+        except urllib.error.HTTPError as exc:
+            self._raise_http_error(exc)
+        except (urllib.error.URLError, TimeoutError) as exc:
+            raise TemporaryConnectorError("Microsoft Graph nicht erreichbar") from exc
+        raise PermanentConnectorError("Microsoft-Graph-Zustellung fehlgeschlagen")
+
+    def _upload_large(
+        self, job: DocumentJob, item_url: str, size: int
+    ) -> tuple[dict, int, str | None]:
+        session_body = json.dumps(
+            {"item": {"@microsoft.graph.conflictBehavior": "replace"}}
+        ).encode("utf-8")
+        request = urllib.request.Request(
+            f"{item_url}/createUploadSession",
+            data=session_body,
+            headers=self._authorization()
+            | {"Content-Type": "application/json", "Content-Length": str(len(session_body))},
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=self.target.timeout_seconds) as response:
+            session = self._read_json(response)
+        upload_url = session.get("uploadUrl")
+        if not isinstance(upload_url, str) or not upload_url:
+            raise PermanentConnectorError("Microsoft Graph lieferte keine Upload-URL")
+        offset = 0
+        final_data: dict = {}
+        final_status = 202
+        final_content_type = None
+        with job.stored_path.open("rb") as source:
+            while chunk := source.read(self.upload_chunk_bytes):
+                end = offset + len(chunk) - 1
+                chunk_request = urllib.request.Request(
+                    upload_url,
+                    data=chunk,
+                    headers={
+                        "Content-Length": str(len(chunk)),
+                        "Content-Range": f"bytes {offset}-{end}/{size}",
+                        "Content-Type": "application/octet-stream",
+                        "User-Agent": "Document-Core/0.1",
+                    },
+                    method="PUT",
+                )
+                with urllib.request.urlopen(
+                    chunk_request, timeout=self.target.timeout_seconds
+                ) as response:
+                    final_data = self._read_json(response)
+                    final_status = response.status
+                    final_content_type = response.headers.get("Content-Type")
+                offset = end + 1
+        if final_status not in {200, 201} or not final_data.get("id"):
+            raise TemporaryConnectorError("Microsoft-Graph-Upload wurde nicht abgeschlossen")
+        return final_data, final_status, final_content_type
+
+    def healthcheck(self) -> bool:
+        drive_id = urllib.parse.quote(self.target.graph_drive_id or "", safe="")
+        try:
+            request = urllib.request.Request(
+                f"{self.graph_base_url}/drives/{drive_id}",
+                headers=self._authorization(),
+                method="GET",
+            )
+            with urllib.request.urlopen(request, timeout=self.target.timeout_seconds) as response:
+                self._read_json(response)
                 return 200 <= response.status < 400
         except (
             ConnectorDeliveryError,

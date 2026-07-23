@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
+from uuid import uuid4
 
 from sqlalchemy import JSON, DateTime, Integer, String, Text, and_, create_engine, delete, inspect, or_, select, text, update
 from sqlalchemy.exc import IntegrityError
@@ -100,6 +101,11 @@ class TargetSystemRow(Base):
     directory: Mapped[str] = mapped_column(String(300), nullable=False)
     path_template: Mapped[str] = mapped_column(Text, nullable=False)
     bearer_token: Mapped[str | None] = mapped_column(Text)
+    graph_tenant_id: Mapped[str | None] = mapped_column(String(200))
+    graph_client_id: Mapped[str | None] = mapped_column(String(200))
+    graph_client_secret: Mapped[str | None] = mapped_column(Text)
+    graph_drive_id: Mapped[str | None] = mapped_column(String(300))
+    graph_folder: Mapped[str] = mapped_column(Text, nullable=False, default="DocumentCore")
     timeout_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
     max_response_bytes: Mapped[int] = mapped_column(Integer, nullable=False, default=65536)
     enabled: Mapped[bool] = mapped_column(nullable=False)
@@ -219,14 +225,14 @@ class JobStore:
         if "target_systems" not in inspect(self.engine).get_table_names():
             return
         with self.sessions.begin() as session:
-            rows = session.scalars(
-                select(TargetSystemRow).where(TargetSystemRow.bearer_token.is_not(None))
-            ).all()
-            if not rows:
-                return
+            rows = session.scalars(select(TargetSystemRow)).all()
             for row in rows:
-                row.bearer_token = self.secret_cipher.migrate_or_rotate(row.bearer_token or "")
-            for row in session.scalars(select(TargetSystemRow)).all():
+                if row.bearer_token:
+                    row.bearer_token = self.secret_cipher.migrate_or_rotate(row.bearer_token)
+                if row.graph_client_secret:
+                    row.graph_client_secret = self.secret_cipher.migrate_or_rotate(
+                        row.graph_client_secret
+                    )
                 row.last_error = self.redact(row.last_error)
             for row in session.scalars(select(JobRow)).all():
                 row.last_error = self.redact(row.last_error)
@@ -602,6 +608,14 @@ class JobStore:
                 row.value = value
                 row.updated_at = datetime.now(UTC)
 
+    def ensure_installation_id(self) -> str:
+        installation_id = self.get_system_setting("installation_id")
+        if installation_id:
+            return installation_id
+        installation_id = str(uuid4())
+        self.set_system_setting("installation_id", installation_id)
+        return installation_id
+
     def schema_version(self) -> str:
         try:
             with self.engine.connect() as connection:
@@ -682,6 +696,9 @@ class JobStore:
     def _target_model(self, row: TargetSystemRow) -> TargetSystem:
         values = self._target_values(row)
         values["bearer_token"] = self.secret_cipher.decrypt(values["bearer_token"])
+        values["graph_client_secret"] = self.secret_cipher.decrypt(
+            values["graph_client_secret"]
+        )
         return TargetSystem.model_validate(values)
 
     def list_target_systems(self, enabled_only: bool = False) -> list[TargetSystem]:
@@ -709,6 +726,7 @@ class JobStore:
         target.updated_at = datetime.now(UTC)
         values = target.model_dump()
         values["bearer_token"] = self.secret_cipher.encrypt(target.bearer_token)
+        values["graph_client_secret"] = self.secret_cipher.encrypt(target.graph_client_secret)
         with self.sessions.begin() as session:
             if target.is_default:
                 session.execute(

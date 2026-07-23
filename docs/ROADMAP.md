@@ -51,6 +51,8 @@ Ziel: synthetisches Textdokument Ende-zu-Ende vom Eingang zum Dateisystem-Connec
 ## M5 – Zielsystem-Pilot (v0.5)
 
 - Integrationsweg mit einem ersten Zielsystem verifizieren
+- lizenzierbarer OneDrive-/SharePoint-Connector über Microsoft Graph (MVP umgesetzt)
+- signierte Offline-Lizenzschlüssel und Administration der Modulfreischaltungen (MVP umgesetzt)
 - Mapping-/Connector-Contract-Tests
 - Sandbox-/Testmandant, Retry, Dead Letter und technische Quittung
 - Pilot mit synthetischen Dokumenten, Security- und Datenschutzfreigabe

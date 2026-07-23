@@ -41,7 +41,18 @@ class DocumentPipeline:
         self.settings = settings
         self.store = store
         self.connector = connector
-        self.connector_registry = connector_registry or create_default_connector_registry(settings)
+        license_provider = None
+        if hasattr(store, "get_system_setting"):
+            def current_license() -> tuple[str | None, str]:
+                return (
+                    store.get_system_setting("license_key"),
+                    store.get_system_setting("installation_id", "") or "",
+                )
+
+            license_provider = current_license
+        self.connector_registry = connector_registry or create_default_connector_registry(
+            settings, license_provider
+        )
         self.extractor = extractor or DefaultDocumentExtractor(
             settings.tesseract_lang,
             max_pdf_pages=settings.max_pdf_pages,
